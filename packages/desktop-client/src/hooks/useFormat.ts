@@ -106,7 +106,7 @@ function format(
   }
 }
 
-export function useFormat(): UseFormatResult {
+export function useFormat(overrideCurrency?: Currency): UseFormatResult {
   const [numberFormatPref] = useSyncedPref('numberFormat');
   const [hideFractionPref] = useSyncedPref('hideFraction');
   const [defaultCurrencyCodePref] = useSyncedPref('defaultCurrencyCode');
@@ -116,8 +116,8 @@ export function useFormat(): UseFormatResult {
   );
 
   const activeCurrency = useMemo(() => {
-    return getCurrency(defaultCurrencyCodePref || '');
-  }, [defaultCurrencyCodePref]);
+    return overrideCurrency || getCurrency(defaultCurrencyCodePref || '');
+  }, [overrideCurrency, defaultCurrencyCodePref]);
 
   const numberFormatConfig = useMemo(
     () =>
@@ -180,7 +180,7 @@ export function useFormat(): UseFormatResult {
       }
 
       const intlFormatter = getNumberFormat({
-        format: numberFormatConfig.format,
+        format: overrideCurrency?.format || numberFormatConfig.format,
         decimalPlaces: displayDecimalPlaces,
       }).formatter;
 
@@ -213,6 +213,7 @@ export function useFormat(): UseFormatResult {
       numberFormatConfig,
       applyCurrencyStyling,
       hideFractionPref,
+      overrideCurrency,
     ],
   );
 

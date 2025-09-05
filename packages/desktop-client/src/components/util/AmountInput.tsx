@@ -18,6 +18,8 @@ import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 import { css, cx } from '@emotion/css';
 
+import { type Currency } from 'loot-core/shared/currencies';
+
 import { useFormat } from '@desktop-client/hooks/useFormat';
 import { useMergedRefs } from '@desktop-client/hooks/useMergedRefs';
 
@@ -38,6 +40,7 @@ type AmountInputProps = {
   focused?: boolean;
   disabled?: boolean;
   autoDecimals?: boolean;
+  currency?: Currency;
 };
 
 export function AmountInput({
@@ -57,9 +60,10 @@ export function AmountInput({
   focused,
   disabled = false,
   autoDecimals = false,
+  currency,
 }: AmountInputProps) {
   const { t } = useTranslation();
-  const format = useFormat();
+  const format = useFormat(currency);
   const [symbol, setSymbol] = useState<'+' | '-'>(() => {
     if (sign) return sign;
     return initialValue === 0 ? zeroSign : initialValue > 0 ? '+' : '-';
