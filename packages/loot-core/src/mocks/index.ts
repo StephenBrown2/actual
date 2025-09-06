@@ -24,6 +24,7 @@ export function generateAccount(
     last_reconciled: null,
     tombstone: 0,
     closed: 0,
+    currency_code: null,
     ...emptySyncFields(),
   };
 

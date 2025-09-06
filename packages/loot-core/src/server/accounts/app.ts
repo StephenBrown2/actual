@@ -325,16 +325,28 @@ async function createAccount({
   balance = 0,
   offBudget = false,
   closed = false,
+  currencyCode,
 }: {
   name: string;
   balance?: number | undefined;
   offBudget?: boolean | undefined;
   closed?: boolean | undefined;
+  currencyCode?: string | undefined;
 }) {
+  // Get default currency if not provided
+  if (!currencyCode) {
+    const defaultCurrencyResult = await db.first<{ value: string }>(
+      'SELECT value FROM preferences WHERE id = ?',
+      ['defaultCurrencyCode'],
+    );
+    currencyCode = defaultCurrencyResult?.value || '';
+  }
+
   const id: AccountEntity['id'] = await db.insertAccount({
     name,
     offbudget: offBudget ? 1 : 0,
     closed: closed ? 1 : 0,
+    currency_code: currencyCode,
   });
 
   await db.insertPayee({
