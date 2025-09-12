@@ -52,7 +52,7 @@ export const currencies: Currency[] = [
   { code: 'UAH', name: 'Ukrainian Hryvnia', symbol: '₴', decimalPlaces: 2, format: 'space-comma', symbolFirst: false },
   { code: 'USD', name: 'US Dollar', symbol: '$', decimalPlaces: 2, format: 'comma-dot', symbolFirst: true },
   // Cryptocurrencies
-  { code: 'BTC', name: 'Bitcoin', symbol: '₿', decimalPlaces: 8, format: 'comma-dot', symbolFirst: false, isCrypto: true },
+  { code: 'BTC', name: 'Bitcoin', symbol: '₿', decimalPlaces: 8, format: 'sat-comma-dot', symbolFirst: false, isCrypto: true },
 ];
 
 export function getCurrency(code: string): Currency {

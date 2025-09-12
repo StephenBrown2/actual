@@ -262,6 +262,7 @@ const NUMBER_FORMATS = [
   'apostrophe-dot',
   'comma-dot',
   'comma-dot-in',
+  'sat-comma-dot',
 ] as const;
 
 export type NumberFormats = (typeof NUMBER_FORMATS)[number];
@@ -280,6 +281,11 @@ export const numberFormats: Array<{
   { value: 'space-comma', label: '1\xa0000,33', labelNoFraction: '1\xa0000' },
   { value: 'apostrophe-dot', label: '1’000.33', labelNoFraction: '1’000' },
   { value: 'comma-dot-in', label: '1,00,000.33', labelNoFraction: '1,00,000' },
+  {
+    value: 'sat-comma-dot',
+    label: '1,000.00\xa0033\xa0000',
+    labelNoFraction: '100,000,033,000',
+  },
 ];
 
 let numberFormatConfig: {
@@ -342,6 +348,11 @@ export function getNumberFormat({
       break;
     case 'comma-dot-in':
       locale = 'en-IN';
+      thousandsSeparator = ',';
+      decimalSeparator = '.';
+      break;
+    case 'sat-comma-dot':
+      locale = 'en-US';
       thousandsSeparator = ',';
       decimalSeparator = '.';
       break;
@@ -424,6 +435,13 @@ export function integerToCurrency(
   formatter = getNumberFormat().formatter,
   decimalPlaces: number = 2,
 ) {
+  const formatConfig = getNumberFormat();
+
+  // Special handling for sat-comma-dot format
+  if (formatConfig.value === 'sat-comma-dot') {
+    return formatSatAmount(integerAmount, decimalPlaces, formatConfig);
+  }
+
   const divisor = Math.pow(10, decimalPlaces);
   const amount = safeNumber(integerAmount) / divisor;
 
@@ -431,14 +449,93 @@ export function integerToCurrency(
 }
 
 export function amountToCurrency(amount: Amount): CurrencyAmount {
-  return getNumberFormat().formatter.format(amount);
+  const formatConfig = getNumberFormat();
+
+  // Special handling for sat-comma-dot format
+  if (formatConfig.value === 'sat-comma-dot') {
+    return formatSatAmountDirect(amount, formatConfig);
+  }
+
+  return formatConfig.formatter.format(amount);
+}
+
+function formatSatAmount(
+  integerAmount: IntegerAmount,
+  decimalPlaces: number,
+  formatConfig: ReturnType<typeof getNumberFormat>,
+): string {
+  const divisor = Math.pow(10, decimalPlaces);
+  const amount = safeNumber(integerAmount) / divisor;
+
+  // Delegate to formatSatAmountDirect for the actual formatting logic
+  return formatSatAmountDirect(amount, formatConfig);
+}
+
+function formatSatAmountDirect(
+  amount: Amount,
+  formatConfig: ReturnType<typeof getNumberFormat>,
+): string {
+  // Check if hideFraction is active by looking at formatter config
+  const isHideFraction = formatConfig.formatter.resolvedOptions().maximumFractionDigits === 0;
+
+  // If hideFraction is true, multiply by 100 million and format as integer
+  if (isHideFraction) {
+    const satAmount = Math.round(amount * 100000000);
+    return formatConfig.formatter.format(satAmount);
+  }
+
+  // For regular formatting, we need more precision to handle the special formatting
+  const precision = 8; // Use higher precision for sat amounts
+  const [integerPart, fractionalPart] = amount.toFixed(precision).split('.');
+
+  // Format integer part using standard formatter (with 0 fraction digits)
+  const intFormatter = getNumberFormat({
+    format: formatConfig.value,
+    hideFraction: false,
+    decimalPlaces: 0,
+  }).formatter;
+  const formattedInteger = intFormatter.format(parseInt(integerPart));
+
+  if (!fractionalPart) {
+    return formattedInteger;
+  }
+
+  // For sat format, preserve all trailing zeros when hideFraction is false
+  const cleanFraction = fractionalPart;
+
+  // Add NBSP every 3 digits after the second decimal place
+  let formattedFraction = cleanFraction;
+  if (cleanFraction.length > 2) {
+    const firstTwo = cleanFraction.slice(0, 2);
+    const remaining = cleanFraction.slice(2);
+
+    // Split remaining digits into groups of 3 and join with NBSP
+    const groups = [];
+    for (let i = 0; i < remaining.length; i += 3) {
+      groups.push(remaining.slice(i, i + 3));
+    }
+
+    formattedFraction =
+      firstTwo + (groups.length > 0 ? '\xa0' + groups.join('\xa0') : '');
+  }
+
+  return formattedInteger + formatConfig.decimalSeparator + formattedFraction;
 }
 
 export function amountToCurrencyNoDecimal(amount: Amount): CurrencyAmount {
-  return getNumberFormat({
+  const formatConfig = getNumberFormat({
     ...numberFormatConfig,
     hideFraction: true,
-  }).formatter.format(amount);
+  });
+
+  // Special handling for sat-comma-dot format
+  if (formatConfig.value === 'sat-comma-dot') {
+    // When hideFraction is true for sat format, multiply by 100 million
+    const satAmount = Math.round(amount * 100000000);
+    return formatConfig.formatter.format(satAmount);
+  }
+
+  return formatConfig.formatter.format(amount);
 }
 
 export function currencyToAmount(currencyAmount: string): Amount | null {

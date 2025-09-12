@@ -232,6 +232,16 @@ export function useFormat(overrideCurrency?: Currency): UseFormatResult {
       const amount = toAmount(value);
       const decimalPlaces =
         hideFractionPref === 'true' ? 0 : activeCurrency.decimalPlaces;
+
+      // For sat-comma-dot format, use the special formatting
+      if (numberFormatConfig.format === 'sat-comma-dot') {
+        return integerToCurrency(
+          value,
+          undefined,
+          activeCurrency.decimalPlaces,
+        );
+      }
+
       const editFormatter = getNumberFormat({
         format: numberFormatConfig.format,
         decimalPlaces,
