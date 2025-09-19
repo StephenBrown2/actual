@@ -16,7 +16,7 @@ import { subMonths, format, eachMonthOfInterval } from 'date-fns';
 import { AreaChart, Area, YAxis, Tooltip as RechartsTooltip } from 'recharts';
 
 import * as monthUtils from 'loot-core/shared/months';
-import { integerToCurrency } from 'loot-core/shared/util';
+import { integerToFormatted } from 'loot-core/shared/util';
 
 import { PrivacyFilter } from '@desktop-client/components/PrivacyFilter';
 import { LoadingIndicator } from '@desktop-client/components/reports/LoadingIndicator';
@@ -315,7 +315,7 @@ export function BalanceHistoryGraph({
                         {hoveredValue.date}
                       </Text>
                       <PrivacyFilter activationFilters={[() => !isHovered]}>
-                        <Text>{integerToCurrency(hoveredValue.balance)}</Text>
+                        <Text>{integerToFormatted(hoveredValue.balance)}</Text>
                       </PrivacyFilter>
                     </View>
                   )}

@@ -30,7 +30,7 @@ import {
 } from '@react-aria/interactions';
 
 import { isPreviewId } from 'loot-core/shared/transactions';
-import { integerToCurrency } from 'loot-core/shared/util';
+import { integerToFormatted } from 'loot-core/shared/util';
 import {
   type AccountEntity,
   type TransactionEntity,
@@ -293,7 +293,7 @@ export function TransactionListItem({
                     ...makeAmountFullStyle(amount),
                   }}
                 >
-                  {integerToCurrency(amount)}
+                  {integerToFormatted(amount)}
                 </Text>
               </View>
             </View>

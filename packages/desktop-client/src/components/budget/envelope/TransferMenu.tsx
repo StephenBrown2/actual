@@ -8,7 +8,7 @@ import { Input } from '@actual-app/components/input';
 import { View } from '@actual-app/components/view';
 
 import { evalArithmetic } from 'loot-core/shared/arithmetic';
-import { integerToCurrency, amountToInteger } from 'loot-core/shared/util';
+import { integerToFormatted, amountToInteger } from 'loot-core/shared/util';
 import { type CategoryEntity } from 'loot-core/types/models';
 
 import { CategoryAutocomplete } from '@desktop-client/components/autocomplete/CategoryAutocomplete';
@@ -46,7 +46,7 @@ export function TransferMenu({
       : categoryGroups;
   }, [originalCategoryGroups, categoryId, showToBeBudgeted]);
 
-  const _initialAmount = integerToCurrency(Math.max(initialAmount, 0));
+  const _initialAmount = integerToFormatted(Math.max(initialAmount, 0));
   const [amount, setAmount] = useState<string | null>(null);
   const [toCategoryId, setToCategoryId] = useState<string | null>(null);
 

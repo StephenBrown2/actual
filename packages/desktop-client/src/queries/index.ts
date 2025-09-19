@@ -9,7 +9,7 @@ import {
   getShortYearFormat,
 } from 'loot-core/shared/months';
 import { q, type Query } from 'loot-core/shared/query';
-import { currencyToAmount, amountToInteger } from 'loot-core/shared/util';
+import { formattedToAmount, amountToInteger } from 'loot-core/shared/util';
 import { type AccountEntity } from 'loot-core/types/models';
 import { type SyncedPrefs } from 'loot-core/types/prefs';
 
@@ -82,7 +82,7 @@ export function transactionsSearch(
   search: string,
   dateFormat: SyncedPrefs['dateFormat'],
 ) {
-  const amount = currencyToAmount(search);
+  const amount = formattedToAmount(search);
 
   // Support various date formats
   let parsedDate;

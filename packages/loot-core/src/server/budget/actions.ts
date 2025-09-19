@@ -3,7 +3,7 @@
 import * as asyncStorage from '../../platform/server/asyncStorage';
 import { getLocale } from '../../shared/locale';
 import * as monthUtils from '../../shared/months';
-import { integerToCurrency, safeNumber } from '../../shared/util';
+import { integerToFormatted, safeNumber } from '../../shared/util';
 import { CategoryEntity } from '../../types/models';
 import * as db from '../db';
 import * as sheet from '../sheet';
@@ -585,7 +585,7 @@ async function addMovementNotes({
   to: CategoryEntity['id'] | 'to-budget' | 'overbudgeted';
   from: CategoryEntity['id'] | 'to-budget';
 }) {
-  const displayAmount = integerToCurrency(amount);
+  const displayAmount = integerToFormatted(amount);
 
   const monthBudgetNotesId = `budget-${month}`;
   const existingMonthBudgetNotes = addNewLine(

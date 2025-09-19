@@ -11,7 +11,7 @@ import { View } from '@actual-app/components/view';
 
 import { type BudgetType } from 'loot-core/server/prefs';
 import * as monthUtils from 'loot-core/shared/months';
-import { groupById, integerToCurrency } from 'loot-core/shared/util';
+import { groupById, integerToFormatted } from 'loot-core/shared/util';
 import { type CategoryEntity } from 'loot-core/types/models';
 
 import { BalanceCell } from './BalanceCell';
@@ -281,7 +281,7 @@ export function ExpenseCategoryListItem({
               });
               dispatch(collapseModals({ rootModalName: balanceMenuModalName }));
               showUndoNotification({
-                message: `Transferred ${integerToCurrency(amount)} from ${category.name} to ${categoriesById[toCategoryId].name}.`,
+                message: `Transferred ${integerToFormatted(amount)} from ${category.name} to ${categoriesById[toCategoryId].name}.`,
               });
             },
             showToBeBudgeted: true,

@@ -21,7 +21,7 @@ import { css } from '@emotion/css';
 
 import { evalArithmetic } from 'loot-core/shared/arithmetic';
 import * as monthUtils from 'loot-core/shared/months';
-import { integerToCurrency, amountToInteger } from 'loot-core/shared/util';
+import { integerToFormatted, amountToInteger } from 'loot-core/shared/util';
 import {
   type CategoryGroupEntity,
   type CategoryEntity,
@@ -393,7 +393,7 @@ export const ExpenseCategoryMonth = memo(function ExpenseCategoryMonth({
             type: 'financial',
             getValueStyle: makeAmountGrey,
             formatExpr: expr => {
-              return integerToCurrency(expr);
+              return integerToFormatted(expr);
             },
             unformatExpr: expr => {
               return amountToInteger(evalArithmetic(expr, 0) ?? 0);

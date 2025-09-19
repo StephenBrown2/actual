@@ -8,7 +8,7 @@ import { Input } from '@actual-app/components/input';
 import { View } from '@actual-app/components/view';
 
 import { evalArithmetic } from 'loot-core/shared/arithmetic';
-import { integerToCurrency, amountToInteger } from 'loot-core/shared/util';
+import { integerToFormatted, amountToInteger } from 'loot-core/shared/util';
 
 import { useSheetValue } from '@desktop-client/hooks/useSheetValue';
 
@@ -20,7 +20,7 @@ export function HoldMenu({ onSubmit, onClose }: HoldMenuProps) {
   const [amount, setAmount] = useState<string | null>(null);
 
   useSheetValue<'envelope-budget', 'to-budget'>('to-budget', ({ value }) => {
-    setAmount(integerToCurrency(Math.max(value || 0, 0)));
+    setAmount(integerToFormatted(Math.max(value || 0, 0)));
   });
 
   function _onSubmit(newAmount: string) {

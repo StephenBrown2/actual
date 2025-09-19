@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { styles } from '@actual-app/components/styles';
 
 import { format, sheetForMonth, prevMonth } from 'loot-core/shared/months';
-import { groupById, integerToCurrency } from 'loot-core/shared/util';
+import { groupById, integerToFormatted } from 'loot-core/shared/util';
 
 import { ToBudgetAmount } from '@desktop-client/components/budget/envelope/budgetsummary/ToBudgetAmount';
 import { TotalsList } from '@desktop-client/components/budget/envelope/budgetsummary/TotalsList';
@@ -68,7 +68,7 @@ export function EnvelopeBudgetSummaryModal({
               dispatch(collapseModals({ rootModalName: 'transfer' }));
               showUndoNotification({
                 message: t('Transferred {{amount}} to {{categoryName}}', {
-                  amount: integerToCurrency(amount),
+                  amount: integerToFormatted(amount),
                   categoryName: categoriesById[toCategoryId].name,
                 }),
               });

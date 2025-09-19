@@ -4,8 +4,8 @@ import { evalArithmetic } from 'loot-core/shared/arithmetic';
 import { currentDay } from 'loot-core/shared/months';
 import {
   amountToInteger,
-  type CurrencyAmount,
-  integerToCurrencyWithDecimal,
+  integerToFormattedWithDecimal,
+  type FormattedAmount,
 } from 'loot-core/shared/util';
 import {
   type AccountEntity,
@@ -15,8 +15,8 @@ import {
 
 export type SerializedTransaction = Omit<TransactionEntity, 'date'> & {
   date: string;
-  debit: CurrencyAmount;
-  credit: CurrencyAmount;
+  debit: FormattedAmount;
+  credit: FormattedAmount;
 };
 
 export type TransactionEditFunction = (
@@ -62,8 +62,8 @@ export function serializeTransaction(
   return {
     ...transaction,
     date,
-    debit: debit != null ? integerToCurrencyWithDecimal(debit) : '',
-    credit: credit != null ? integerToCurrencyWithDecimal(credit) : '',
+    debit: debit != null ? integerToFormattedWithDecimal(debit) : '',
+    credit: credit != null ? integerToFormattedWithDecimal(credit) : '',
   };
 }
 

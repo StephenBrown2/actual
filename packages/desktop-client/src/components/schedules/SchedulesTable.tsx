@@ -132,7 +132,7 @@ export function ScheduleAmountCell({
   const format = useFormat();
 
   const num = getScheduledAmount(amount);
-  const currencyAmount = format(Math.abs(num || 0), 'financial');
+  const formattedAmount = format(Math.abs(num || 0), 'financial');
   const isApprox = op === 'isapprox' || op === 'isbetween';
 
   return (
@@ -157,8 +157,8 @@ export function ScheduleAmountCell({
           }}
           title={
             isApprox
-              ? t('Approximately {{currencyAmount}}', { currencyAmount })
-              : currencyAmount
+              ? t('Approximately {{formattedAmount}}', { formattedAmount })
+              : formattedAmount
           }
         >
           ~
@@ -174,12 +174,12 @@ export function ScheduleAmountCell({
         }}
         title={
           isApprox
-            ? t('Approximately {{currencyAmount}}', { currencyAmount })
-            : currencyAmount
+            ? t('Approximately {{formattedAmount}}', { formattedAmount })
+            : formattedAmount
         }
       >
         <PrivacyFilter>
-          {num > 0 ? `+${currencyAmount}` : `${currencyAmount}`}
+          {num > 0 ? `+${formattedAmount}` : `${formattedAmount}`}
         </PrivacyFilter>
       </Text>
     </Cell>

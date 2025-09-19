@@ -1,6 +1,8 @@
 // @ts-strict-ignore
 import { type Locale, formatDistanceToNow } from 'date-fns';
 
+import { type Currency } from './currencies';
+
 export function last<T>(arr: Array<T>) {
   return arr[arr.length - 1];
 }
@@ -252,7 +254,7 @@ export function appendDecimals(
     result = result.padStart(3, '0');
     result = result.slice(0, -2) + separator + result.slice(-2);
   }
-  return amountToCurrency(currencyToAmount(result));
+  return amountToFormatted(formattedToAmount(result));
 }
 
 const NUMBER_FORMATS = [
@@ -388,12 +390,21 @@ export type Amount = number;
  * The exact amount that is formatted based on the configured number format.
  * For example, 123.45 would be '123.45' or '123,45'.
  */
-export type CurrencyAmount = string;
+export type FormattedAmount = string;
 /**
  * The amount with the decimal point removed.
  * For example, 123.45 would be 12345.
  */
 export type IntegerAmount = number;
+
+/**
+ * Combines a Currency and an IntegerAmount to represent
+ * a monetary value in a specific currency.
+ */
+export type CurrencyAmount = {
+  currency: Currency;
+  amount: IntegerAmount;
+};
 
 // We dont use `Number.MAX_SAFE_NUMBER` and such here because those
 // numbers are so large that it's not safe to convert them to floats
@@ -419,11 +430,11 @@ export function safeNumber(value: number) {
   return value;
 }
 
-export function toRelaxedNumber(currencyAmount: CurrencyAmount): Amount {
-  return integerToAmount(currencyToInteger(currencyAmount) || 0);
+export function toRelaxedNumber(formattedAmount: FormattedAmount): Amount {
+  return integerToAmount(formattedToInteger(formattedAmount) || 0);
 }
 
-export function integerToCurrency(
+export function integerToFormatted(
   integerAmount: IntegerAmount,
   formatter = getNumberFormat().formatter,
   decimalPlaces: number = 2,
@@ -434,10 +445,10 @@ export function integerToCurrency(
   return formatter.format(amount);
 }
 
-export function integerToCurrencyWithDecimal(integerAmount: IntegerAmount) {
+export function integerToFormattedWithDecimal(integerAmount: IntegerAmount) {
   // If decimal digits exist, keep them. Otherwise format them as usual.
   if (integerAmount % 100 !== 0) {
-    return integerToCurrency(
+    return integerToFormatted(
       integerAmount,
       getNumberFormat({
         ...numberFormatConfig,
@@ -446,46 +457,46 @@ export function integerToCurrencyWithDecimal(integerAmount: IntegerAmount) {
     );
   }
 
-  return integerToCurrency(integerAmount);
+  return integerToFormatted(integerAmount);
 }
 
-export function amountToCurrency(amount: Amount): CurrencyAmount {
+export function amountToFormatted(amount: Amount): FormattedAmount {
   return getNumberFormat().formatter.format(amount);
 }
 
-export function amountToCurrencyNoDecimal(amount: Amount): CurrencyAmount {
+export function amountToFormattedNoDecimal(amount: Amount): FormattedAmount {
   return getNumberFormat({
     ...numberFormatConfig,
     hideFraction: true,
   }).formatter.format(amount);
 }
 
-export function currencyToAmount(currencyAmount: string): Amount | null {
+export function formattedToAmount(formattedAmount: string): Amount | null {
   let integer, fraction;
 
   // match the last dot or comma in the string
-  const match = currencyAmount.match(/[,.](?=[^.,]*$)/);
+  const match = formattedAmount.match(/[,.](?=[^.,]*$)/);
 
   if (
     !match ||
     (match[0] === getNumberFormat().thousandsSeparator &&
-      match.index + 4 <= currencyAmount.length)
+      match.index + 4 <= formattedAmount.length)
   ) {
     fraction = null;
-    integer = currencyAmount.replace(/[^\d-]/g, '');
+    integer = formattedAmount.replace(/[^\d-]/g, '');
   } else {
-    integer = currencyAmount.slice(0, match.index).replace(/[^\d-]/g, '');
-    fraction = currencyAmount.slice(match.index + 1);
+    integer = formattedAmount.slice(0, match.index).replace(/[^\d-]/g, '');
+    fraction = formattedAmount.slice(match.index + 1);
   }
 
   const amount = parseFloat(integer + '.' + fraction);
   return isNaN(amount) ? null : amount;
 }
 
-export function currencyToInteger(
-  currencyAmount: CurrencyAmount,
+export function formattedToInteger(
+  formattedAmount: FormattedAmount,
 ): IntegerAmount | null {
-  const amount = currencyToAmount(currencyAmount);
+  const amount = formattedToAmount(formattedAmount);
   return amount == null ? null : amountToInteger(amount);
 }
 

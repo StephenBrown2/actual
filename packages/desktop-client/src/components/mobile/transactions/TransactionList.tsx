@@ -34,7 +34,7 @@ import { View } from '@actual-app/components/view';
 import * as monthUtils from 'loot-core/shared/months';
 import { isPreviewId } from 'loot-core/shared/transactions';
 import { validForTransfer } from 'loot-core/shared/transfer';
-import { groupById, integerToCurrency } from 'loot-core/shared/util';
+import { groupById, integerToFormatted } from 'loot-core/shared/util';
 import { type TransactionEntity } from 'loot-core/types/models';
 
 import { ROW_HEIGHT, TransactionListItem } from './TransactionListItem';
@@ -483,7 +483,7 @@ function SelectedTransactionsFloatingActionBar({
                       case 'amount':
                         displayValue = Number.isNaN(Number(value))
                           ? value
-                          : integerToCurrency(Number(value));
+                          : integerToFormatted(Number(value));
                         break;
                       case 'notes':
                         displayValue = `${mode} with ${value}`;
