@@ -21,6 +21,8 @@ export type SyncedPrefs = Partial<
     | 'currencySymbolPosition'
     | 'currencySpaceBetweenAmountAndSymbol'
     | 'defaultCurrencyCode'
+    | 'enableMultiCurrency'
+    | 'enableMultiCurrencyOnBudget'
     | 'plugins'
     | `show-account-${string}-net-worth-chart`
     | `side-nav.show-balance-history-${string}`
