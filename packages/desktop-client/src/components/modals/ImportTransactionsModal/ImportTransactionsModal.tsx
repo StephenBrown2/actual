@@ -121,7 +121,7 @@ function getInitialDateFormat(transactions, mappings) {
  * Field mappings with any field reading the currency column unmapped, so
  * auto-detection never also imports the currency cell as notes or payee.
  */
-function withoutColumn<T extends Record<string, string | null>>(
+function withoutColumn<T extends Record<string, string | string[] | null>>(
   mappings: T,
   column: string | null,
 ): T {
@@ -129,7 +129,11 @@ function withoutColumn<T extends Record<string, string | null>>(
   return Object.fromEntries(
     Object.entries(mappings).map(([field, value]) => [
       field,
-      value === column ? null : value,
+      Array.isArray(value)
+        ? value.filter(mappedColumn => mappedColumn !== column)
+        : value === column
+          ? null
+          : value,
     ]),
   ) as T;
 }
@@ -712,7 +716,12 @@ function ImportTransactionsModalBody({
   function onUpdateFields(field, name) {
     const newFieldMappings = {
       ...fieldMappings,
-      [field]: name === '' ? null : name,
+      [field]:
+        name === ''
+          ? null
+          : Array.isArray(name) && name.length === 0
+            ? null
+            : name,
     };
     setFieldMappings(newFieldMappings);
   }
