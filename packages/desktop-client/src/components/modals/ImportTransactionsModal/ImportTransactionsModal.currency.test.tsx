@@ -242,6 +242,11 @@ describe('CSV currency column', () => {
 
   it('re-splits when the column is chosen after the first preview, and saves it apart from the field mappings', async () => {
     setup({
+      fieldMappings: JSON.stringify({
+        ...JSON.parse(mappings),
+        payee: ['Payee', 'Currency'],
+        notes: ['Currency'],
+      }),
       rows: [csvRow('1', '-1500', 'JPY'), csvRow('2', '-12', 'EUR')],
       currencyColumn: '',
     });
