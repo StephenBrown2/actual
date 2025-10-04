@@ -531,7 +531,12 @@ export function ImportTransactionsModal({
   function onUpdateFields(field, name) {
     const newFieldMappings = {
       ...fieldMappings,
-      [field]: name === '' ? null : name,
+      [field]:
+        name === ''
+          ? null
+          : Array.isArray(name) && name.length === 0
+            ? null
+            : name,
     };
     setFieldMappings(newFieldMappings);
   }
