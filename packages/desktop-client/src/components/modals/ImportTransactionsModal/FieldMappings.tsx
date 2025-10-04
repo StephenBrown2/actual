@@ -12,16 +12,21 @@ import {
   type ImportTransaction,
 } from './utils';
 
+import { FieldAutocomplete } from '@desktop-client/components/autocomplete/FieldAutocomplete';
 import { SectionLabel } from '@desktop-client/components/forms';
 
 type FieldMappingsProps = {
   transactions: ImportTransaction[];
   mappings?: FieldMapping;
-  onChange: (field: keyof FieldMapping, newValue: string) => void;
+  onChange: (field: keyof FieldMapping, newValue: string | string[]) => void;
   splitMode: boolean;
   inOutMode: boolean;
   hasHeaderRow: boolean;
 };
+
+function toArray<T>(value: T | T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : value ? [value] : [];
+}
 
 export function FieldMappings({
   transactions,
@@ -64,20 +69,20 @@ export function FieldMappings({
         </View>
         <View style={{ flex: 1 }}>
           <SubLabel title={t('Payee')} />
-          <SelectField
+          <FieldAutocomplete
             options={options}
-            value={mappings.payee}
-            onChange={name => onChange('payee', name)}
+            value={toArray(mappings.payee)}
+            onChange={values => onChange('payee', values)}
             hasHeaderRow={hasHeaderRow}
             firstTransaction={transactions[0]}
           />
         </View>
         <View style={{ flex: 1 }}>
           <SubLabel title={t('Notes')} />
-          <SelectField
+          <FieldAutocomplete
             options={options}
-            value={mappings.notes}
-            onChange={name => onChange('notes', name)}
+            value={toArray(mappings.notes)}
+            onChange={values => onChange('notes', values)}
             hasHeaderRow={hasHeaderRow}
             firstTransaction={transactions[0]}
           />
