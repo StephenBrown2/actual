@@ -192,6 +192,7 @@ function TransactionListWithPreviews({
       onSearch={onSearch}
       onOpenTransaction={onOpenTransaction}
       onRefresh={onRefresh}
+      currencyCode={account.currency_code}
     />
   );
 }

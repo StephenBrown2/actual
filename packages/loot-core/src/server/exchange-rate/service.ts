@@ -1,3 +1,4 @@
+import * as connection from '../../platform/server/connection';
 import { logger } from '../../platform/server/log';
 import * as db from '../db';
 
@@ -12,6 +13,7 @@ import {
 class ExchangeRateService {
   private providers: ExchangeRateProvider[] = [];
   private periodicUpdatesStarted = false;
+  private initialFetchComplete = false;
 
   async initializeProviders(): Promise<void> {
     try {
@@ -25,7 +27,8 @@ class ExchangeRateService {
         );
       } else {
         logger.warn(
-          'No OpenExchangeRates App ID configured. Exchange rates will be limited to major currencies. ' +
+          'No OpenExchangeRates App ID configured. Exchange rates will be limited to major currencies ' +
+            '(USD, JPY, GBP, EUR, CHF, CAD, BTC, AUD). ' +
             'Please set the openExchangeRatesAppId preference to enable full exchange rate support. ' +
             'Sign up for a free account at https://openexchangerates.org/signup',
         );
@@ -95,12 +98,17 @@ class ExchangeRateService {
       return 1.0;
     }
 
+    // Lazy start periodic updates if not already started
+    // (In case getRate is called before explicit initialization)
     if (!this.periodicUpdatesStarted) {
-      this.periodicUpdatesStarted = true;
-      this.startPeriodicUpdate().catch(error => {
-        logger.error('Failed to start periodic rate updates:', error);
-        this.periodicUpdatesStarted = false;
-      });
+      this.startPeriodicUpdate()
+        .then(() => {
+          this.markPeriodicUpdatesStarted();
+        })
+        .catch(error => {
+          logger.error('Failed to start periodic rate updates:', error);
+          this.markPeriodicUpdatesStopped();
+        });
     }
 
     const targetDate = date || new Date().toISOString().split('T')[0];
@@ -163,35 +171,95 @@ class ExchangeRateService {
   }
 
   async getUsedCurrencies(): Promise<string[]> {
+    const defaultCurrency = await db.first<{ value: string }>(
+      'SELECT value FROM preferences WHERE id = ?',
+      ['defaultCurrencyCode'],
+    );
+    const defaultCurrencyCode = defaultCurrency?.value || '';
+
+    const accountCurrencies = await db.runQuery<{ currency_code: string }>(
+      `SELECT DISTINCT COALESCE(currency_code, ?) as currency_code FROM accounts WHERE tombstone = 0`,
+      [defaultCurrencyCode],
+      true,
+    );
+
     const currencies = new Set<string>();
+    accountCurrencies.forEach(
+      row => row.currency_code && currencies.add(row.currency_code),
+    );
 
     return Array.from(currencies);
   }
 
+  markPeriodicUpdatesStarted(): void {
+    this.periodicUpdatesStarted = true;
+  }
+
+  markPeriodicUpdatesStopped(): void {
+    this.periodicUpdatesStarted = false;
+  }
+
   async startPeriodicUpdate(): Promise<void> {
-    try {
-      const baseCurrency = await db.first<{ value: string }>(
-        'SELECT value FROM preferences WHERE id = ?',
-        ['defaultCurrencyCode'],
-      );
-
-      if (!baseCurrency) {
-        setTimeout(() => this.startPeriodicUpdate(), 60000);
-        return;
-      }
-
-      const targetCurrencies = await this.getUsedCurrencies();
-
-      if (targetCurrencies.length > 0) {
-        await this.fetchAndCacheRates(baseCurrency.value, targetCurrencies);
-      }
-
-      const nextUpdateDelay = await this.getNextUpdateDelay();
-      setTimeout(() => this.startPeriodicUpdate(), nextUpdateDelay);
-    } catch (error) {
-      logger.error('Error in periodic update:', error);
-      setTimeout(() => this.startPeriodicUpdate(), 300000);
+    if (this.periodicUpdatesStarted) {
+      return;
     }
+
+    const baseCurrency = await db.first<{ value: string }>(
+      'SELECT value FROM preferences WHERE id = ?',
+      ['defaultCurrencyCode'],
+    );
+
+    if (!baseCurrency) {
+      setTimeout(() => {
+        this.startPeriodicUpdate()
+          .then(() => {
+            this.markPeriodicUpdatesStarted();
+          })
+          .catch(error => {
+            logger.error('Error in periodic update retry:', error);
+            this.markPeriodicUpdatesStopped();
+          });
+      }, 60000);
+      return;
+    }
+
+    const targetCurrencies = await this.getUsedCurrencies();
+
+    if (targetCurrencies.length > 0) {
+      // Fetch rates FROM each foreign currency TO the base currency
+      // This allows SQL queries to convert account balances to the default currency
+      // Note: getRate() can handle reverse lookups if needed (1/rate)
+      for (const currency of targetCurrencies) {
+        if (currency !== baseCurrency.value) {
+          await this.fetchAndCacheRates(currency, [baseCurrency.value]);
+        }
+      }
+
+      // After the initial fetch completes, trigger a sync-event to refresh
+      // any converted balance queries that ran before rates were available
+      if (!this.initialFetchComplete) {
+        this.initialFetchComplete = true;
+        logger.info(
+          'Initial exchange rates fetched, triggering balance refresh',
+        );
+        connection.send('sync-event', {
+          type: 'success',
+          tables: ['accounts'],
+        });
+      }
+    }
+
+    const nextUpdateDelay = await this.getNextUpdateDelay();
+    setTimeout(() => {
+      this.startPeriodicUpdate()
+        .then(() => {
+          this.markPeriodicUpdatesStarted();
+        })
+        .catch(error => {
+          logger.error('Error in periodic update:', error);
+          this.markPeriodicUpdatesStopped();
+        });
+    }, nextUpdateDelay);
   }
 
   private async getNextUpdateDelay(): Promise<number> {

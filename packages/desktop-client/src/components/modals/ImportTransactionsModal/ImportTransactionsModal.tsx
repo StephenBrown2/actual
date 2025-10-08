@@ -17,7 +17,7 @@ import { View } from '@actual-app/components/view';
 
 import { send } from 'loot-core/platform/client/fetch';
 import { type ParseFileOptions } from 'loot-core/server/transactions/import/parse-file';
-import { amountToInteger } from 'loot-core/shared/util';
+import { getCurrency } from 'loot-core/shared/currencies';
 
 import { DateFormatSelect } from './DateFormatSelect';
 import { FieldMappings } from './FieldMappings';
@@ -51,8 +51,10 @@ import {
   TableHeader,
   TableWithNavigator,
 } from '@desktop-client/components/table';
+import { useAccount } from '@desktop-client/hooks/useAccount';
 import { useCategories } from '@desktop-client/hooks/useCategories';
 import { useDateFormat } from '@desktop-client/hooks/useDateFormat';
+import { useSyncedPref } from '@desktop-client/hooks/useSyncedPref';
 import { useSyncedPrefs } from '@desktop-client/hooks/useSyncedPrefs';
 import { reloadPayees } from '@desktop-client/payees/payeesSlice';
 import { useDispatch } from '@desktop-client/redux';
@@ -166,8 +168,17 @@ export function ImportTransactionsModal({
   const { t } = useTranslation();
   const dateFormat = useDateFormat() || ('MM/dd/yyyy' as const);
   const [prefs, savePrefs] = useSyncedPrefs();
+  const [defaultCurrencyCode] = useSyncedPref('defaultCurrencyCode');
+
   const dispatch = useDispatch();
   const categories = useCategories();
+  const account = useAccount(accountId);
+
+  // Get the currency for this account, falling back to defaultCurrencyCode pref
+  const accountCurrency = getCurrency(
+    account?.currency_code ?? defaultCurrencyCode,
+  );
+  const accountDecimalPlaces = accountCurrency.decimalPlaces;
 
   const [multiplierAmount, setMultiplierAmount] = useState('');
   const [loadingState, setLoadingState] = useState<
@@ -269,6 +280,7 @@ export function ImportTransactionsModal({
           outValue,
           flipAmount,
           multiplierAmount,
+          accountDecimalPlaces,
         );
         if (amount == null) {
           console.log(`Transaction on ${trans.date} has no amount`);
@@ -294,7 +306,7 @@ export function ImportTransactionsModal({
         previewTransactions.push({
           ...finalTransaction,
           date,
-          amount: amountToInteger(amount),
+          amount,
           cleared: clearOnImport,
         });
       }
@@ -351,7 +363,7 @@ export function ImportTransactionsModal({
           return next;
         }, []);
     },
-    [accountId, categories.list, clearOnImport, dispatch],
+    [accountId, categories.list, clearOnImport, dispatch, accountDecimalPlaces],
   );
 
   const parse = useCallback(
@@ -606,6 +618,7 @@ export function ImportTransactionsModal({
         outValue,
         flipAmount,
         multiplierAmount,
+        accountDecimalPlaces,
       );
       if (amount == null) {
         errorMessage = t('Transaction on {{date}} has no amount', {
@@ -643,7 +656,7 @@ export function ImportTransactionsModal({
       finalTransactions.push({
         ...finalTransaction,
         date,
-        amount: amountToInteger(amount),
+        amount,
         cleared: clearOnImport,
         notes: importNotes ? finalTransaction.notes : null,
       });
@@ -862,6 +875,7 @@ export function ImportTransactionsModal({
                       categories={categories.list}
                       onCheckTransaction={onCheckTransaction}
                       reconcile={reconcile}
+                      accountCurrency={accountCurrency}
                     />
                   </View>
                 )}

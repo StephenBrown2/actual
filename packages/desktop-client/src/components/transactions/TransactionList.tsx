@@ -166,6 +166,7 @@ export function TransactionList({
 }: TransactionListProps) {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const [defaultCurrencyCode] = useSyncedPref('defaultCurrencyCode');
   const [learnCategories = 'true'] = useSyncedPref('learn-categories');
   const isLearnCategoriesEnabled = String(learnCategories) === 'true';
 
@@ -353,6 +354,7 @@ export function TransactionList({
       showCategory={true}
       currentAccountId={account && account.id}
       currentCategoryId={category && category.id}
+      currencyCode={account?.currency_code ?? defaultCurrencyCode}
       isAdding={isAdding}
       isNew={isNew}
       isMatched={isMatched}

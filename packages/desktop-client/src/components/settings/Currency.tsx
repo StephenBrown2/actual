@@ -9,56 +9,18 @@ import { View } from '@actual-app/components/view';
 import { css } from '@emotion/css';
 
 import { send } from 'loot-core/platform/client/fetch';
-import { currencies, getCurrency } from 'loot-core/shared/currencies';
+import { getCurrency } from 'loot-core/shared/currencies';
 
 import { Column, Setting } from './UI';
 
 import { Warning, Error } from '@desktop-client/components/alerts';
 import { Link } from '@desktop-client/components/common/Link';
 import { Checkbox, FormLabel } from '@desktop-client/components/forms';
+import { CurrencySelect } from '@desktop-client/components/select/CurrencySelect';
 import { useSyncedPref } from '@desktop-client/hooks/useSyncedPref';
 
 export function CurrencySettings() {
   const { t } = useTranslation();
-
-  const currencyTranslations = useMemo(
-    () =>
-      new Map<string, string>([
-        ['', t('None')],
-        ['AED', t('UAE Dirham')],
-        ['ARS', t('Argentinian Peso')],
-        ['AUD', t('Australian Dollar')],
-        ['BRL', t('Brazilian Real')],
-        ['CAD', t('Canadian Dollar')],
-        ['CHF', t('Swiss Franc')],
-        ['CNY', t('Yuan Renminbi')],
-        ['CRC', t('Costa Rican Colón')],
-        ['EGP', t('Egyptian Pound')],
-        ['EUR', t('Euro')],
-        ['GBP', t('Pound Sterling')],
-        ['HKD', t('Hong Kong Dollar')],
-        ['INR', t('Indian Rupee')],
-        ['JMD', t('Jamaican Dollar')],
-        // ['JPY', t('Japanese Yen')],
-        ['LKR', t('Sri Lankan Rupee')],
-        ['MDL', t('Moldovan Leu')],
-        ['PHP', t('Philippine Peso')],
-        ['PLN', t('Polish Złoty')],
-        ['QAR', t('Qatari Riyal')],
-        ['RON', t('Romanian Leu')],
-        ['RSD', t('Serbian Dinar')],
-        ['RUB', t('Russian Ruble')],
-        ['SAR', t('Saudi Riyal')],
-        ['SEK', t('Swedish Krona')],
-        ['SGD', t('Singapore Dollar')],
-        ['THB', t('Thai Baht')],
-        ['TRY', t('Turkish Lira')],
-        ['UAH', t('Ukrainian Hryvnia')],
-        ['USD', t('US Dollar')],
-        ['UZS', t('Uzbek Soum')],
-      ]),
-    [t],
-  );
 
   const [defaultCurrencyCode, setDefaultCurrencyCodePref] = useSyncedPref(
     'defaultCurrencyCode',
@@ -155,27 +117,6 @@ export function CurrencySettings() {
     },
   });
 
-  const currencyOptions: [string, string][] = currencies
-    .filter(currency => {
-      // Hide "None" option when multi-currency is enabled
-      // since all accounts should have specific currencies
-      if (enableMultiCurrency === 'true' && currency.code === '') {
-        return false;
-      }
-      return true;
-    })
-    .map(currency => {
-      const translatedName =
-        currencyTranslations.get(currency.code) ?? currency.name;
-      if (currency.code === '') {
-        return [currency.code, translatedName];
-      }
-      return [
-        currency.code,
-        `${currency.code} - ${translatedName} (${currency.symbol})`,
-      ];
-    });
-
   const handleCurrencyChange = (code: string) => {
     setDefaultCurrencyCodePref(code);
     if (code !== '') {
@@ -217,10 +158,10 @@ export function CurrencySettings() {
         >
           <View style={{ display: 'flex', flexDirection: 'row', gap: '1.5em' }}>
             <Column title={t('Default Currency')}>
-              <Select
+              <CurrencySelect
                 value={selectedCurrencyCode}
                 onChange={handleCurrencyChange}
-                options={currencyOptions}
+                includeNoneOption={enableMultiCurrency !== 'true'}
                 className={selectButtonClassName}
                 style={{ width: '100%' }}
               />

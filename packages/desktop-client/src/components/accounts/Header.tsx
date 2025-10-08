@@ -591,6 +591,7 @@ export function AccountHeader({
           balanceQuery={balanceQuery}
           onDone={onDoneReconciling}
           onCreateTransaction={onCreateReconciliationTransaction}
+          currencyCode={account?.currency_code}
         />
       )}
     </>

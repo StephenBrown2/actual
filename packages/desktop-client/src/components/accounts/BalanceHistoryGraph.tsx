@@ -15,12 +15,15 @@ import { View } from '@actual-app/components/view';
 import { subMonths, format, eachMonthOfInterval } from 'date-fns';
 import { AreaChart, Area, YAxis, Tooltip as RechartsTooltip } from 'recharts';
 
+import { getCurrency } from 'loot-core/shared/currencies';
 import * as monthUtils from 'loot-core/shared/months';
 import { integerToFormatted } from 'loot-core/shared/util';
 
 import { PrivacyFilter } from '@desktop-client/components/PrivacyFilter';
 import { LoadingIndicator } from '@desktop-client/components/reports/LoadingIndicator';
+import { useAccounts } from '@desktop-client/hooks/useAccounts';
 import { useLocale } from '@desktop-client/hooks/useLocale';
+import { useSyncedPref } from '@desktop-client/hooks/useSyncedPref';
 import * as query from '@desktop-client/queries';
 import { liveQuery } from '@desktop-client/queries/liveQuery';
 
@@ -38,6 +41,17 @@ export function BalanceHistoryGraph({
   ref,
 }: BalanceHistoryGraphProps) {
   const locale = useLocale();
+  const accounts = useAccounts();
+  const [defaultCurrencyCode] = useSyncedPref('defaultCurrencyCode');
+
+  // Get the decimal places for the account's currency
+  const decimalPlaces = useMemo(() => {
+    const account = accounts.find(a => a.id === accountId);
+    const code = account?.currency_code ?? defaultCurrencyCode;
+    const currency = getCurrency(code);
+    return currency.decimalPlaces;
+  }, [accounts, accountId, defaultCurrencyCode]);
+
   const [balanceData, setBalanceData] = useState<
     Array<{ date: string; balance: number }>
   >([]);
@@ -315,7 +329,13 @@ export function BalanceHistoryGraph({
                         {hoveredValue.date}
                       </Text>
                       <PrivacyFilter activationFilters={[() => !isHovered]}>
-                        <Text>{integerToFormatted(hoveredValue.balance)}</Text>
+                        <Text>
+                          {integerToFormatted(
+                            hoveredValue.balance,
+                            undefined,
+                            decimalPlaces,
+                          )}
+                        </Text>
                       </PrivacyFilter>
                     </View>
                   )}
