@@ -3,6 +3,17 @@ import * as db from '../db';
 
 import { runRules } from './transaction-rules';
 
+/**
+ * Check if a transaction has a foreign exchange rate set
+ */
+function hasForeignExchangeRate(transaction): boolean {
+  return (
+    transaction.fx_rate != null &&
+    transaction.fx_rate !== 0 &&
+    transaction.fx_rate !== 1
+  );
+}
+
 async function getPayee(acct) {
   return db.first<db.DbPayee>('SELECT * FROM payees WHERE transfer_acct = ?', [
     acct,
@@ -58,15 +69,24 @@ export async function addTransfer(transaction, transferredAccount) {
     [transaction.account],
   );
 
+  // Check if this is an FX transfer
+  const isFxTransfer = hasForeignExchangeRate(transaction);
+
   const transferTransaction = {
     account: transferredAccount,
-    amount: -transaction.amount,
+    // For FX transfers, calculate the transfer amount using the exchange rate
+    // For regular transfers, use the inverse amount
+    amount: isFxTransfer
+      ? -Math.round(transaction.amount * transaction.fx_rate)
+      : -transaction.amount,
     payee: fromPayee,
     date: transaction.date,
     transfer_id: transaction.id,
     notes: transaction.notes || null,
     schedule: transaction.schedule,
     cleared: false,
+    // If there's an FX rate, calculate the inverse rate for the other side
+    ...(isFxTransfer ? { fx_rate: 1 / transaction.fx_rate } : {}),
   };
   const { notes, cleared } = await runRules(transferTransaction);
   const id = await db.insertTransaction({
@@ -112,8 +132,14 @@ export async function removeTransfer(transaction) {
 
 export async function updateTransfer(transaction, transferredAccount) {
   const payee = await getPayee(transaction.account);
+  const transferTrans = await db.getTransaction(transaction.transfer_id);
 
-  await db.updateTransaction({
+  // Check if this is an FX transfer (has an fx_rate that's not 0 or 1)
+  const isFxTransfer =
+    hasForeignExchangeRate(transaction) ||
+    (transferTrans && hasForeignExchangeRate(transferTrans));
+
+  const updateData = {
     id: transaction.transfer_id,
     account: transferredAccount,
     // Make sure to update the payee on the other side in case the
@@ -121,9 +147,20 @@ export async function updateTransfer(transaction, transferredAccount) {
     payee: payee.id,
     date: transaction.date,
     notes: transaction.notes,
-    amount: -transaction.amount,
     schedule: transaction.schedule,
-  });
+    // For FX transfers, calculate the transfer amount using the exchange rate
+    // Only update amount if this side has the fx_rate
+    ...(hasForeignExchangeRate(transaction)
+      ? {
+          amount: -Math.round(transaction.amount * transaction.fx_rate),
+          fx_rate: 1 / transaction.fx_rate, // Set inverse rate on the transfer
+        }
+      : isFxTransfer
+        ? {} // Don't update amount/rate if only the other side has the fx_rate
+        : { amount: -transaction.amount }), // Regular transfer
+  };
+
+  await db.updateTransaction(updateData);
 
   const categoryCleared = await clearCategory(transaction, transferredAccount);
   if (categoryCleared) {

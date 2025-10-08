@@ -141,6 +141,39 @@ class ExchangeRateService {
     }
 
     // Either no cached rate exists, or today's rate is too old - fetch fresh rate
+    // For historical dates, try to fetch historical rate if provider supports it
+    if (!isToday) {
+      for (const provider of this.providers) {
+        if (provider.supportsHistory && provider.fetchHistoricalRate) {
+          try {
+            const rate = await provider.fetchHistoricalRate(
+              fromCurrency,
+              toCurrency,
+              targetDate,
+            );
+            if (rate !== null) {
+              // Cache the historical rate
+              await this.cacheRate({
+                from_currency: fromCurrency,
+                to_currency: toCurrency,
+                rate,
+                date: targetDate,
+                source: provider.name,
+                timestamp: new Date().toISOString(),
+              });
+              return rate;
+            }
+          } catch (error) {
+            logger.error(
+              `Failed to fetch historical rate from ${provider.name}:`,
+              error,
+            );
+          }
+        }
+      }
+    }
+
+    // For today's rate or if historical fetch failed, fetch current rate
     await this.fetchAndCacheRates(fromCurrency, [toCurrency]);
 
     const freshRate = await db.first<ExchangeRateEntity>(

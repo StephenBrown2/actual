@@ -167,6 +167,7 @@ export type DbTransaction = {
   imported_description?: string | null;
   transferred_id?: DbTransaction['id'] | null;
   schedule?: DbSchedule['id'] | null;
+  fx_rate?: number | null;
   starting_balance_flag: 1 | 0;
   tombstone: 1 | 0;
   cleared: 1 | 0;
@@ -268,6 +269,7 @@ export type DbViewTransactionInternal = {
   imported_payee: DbTransaction['imported_description'] | null;
   starting_balance_flag: DbTransaction['starting_balance_flag'] | null;
   transfer_id: DbTransaction['transferred_id'] | null;
+  fx_rate: DbTransaction['fx_rate'] | null;
   schedule: DbSchedule['id'] | null;
   sort_order: DbTransaction['sort_order'];
   cleared: DbTransaction['cleared'];

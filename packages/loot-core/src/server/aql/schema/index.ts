@@ -48,6 +48,7 @@ export const schema = {
     imported_payee: f('string'),
     starting_balance_flag: f('boolean'),
     transfer_id: f('id'),
+    fx_rate: f('float'),
     sort_order: f('float', { default: () => Date.now() }),
     cleared: f('boolean', { default: true }),
     reconciled: f('boolean', { default: false }),

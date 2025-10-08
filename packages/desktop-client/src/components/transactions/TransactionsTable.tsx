@@ -33,8 +33,10 @@ import {
   SvgArrowsSynchronize,
   SvgCalendar3,
   SvgHyperlink2,
+  SvgRefreshArrow,
   SvgSubtract,
 } from '@actual-app/components/icons/v2';
+import { Input } from '@actual-app/components/input';
 import { Popover } from '@actual-app/components/popover';
 import { styles } from '@actual-app/components/styles';
 import { Text } from '@actual-app/components/text';
@@ -43,6 +45,7 @@ import { Tooltip } from '@actual-app/components/tooltip';
 import { View } from '@actual-app/components/view';
 import { format as formatDate, parseISO } from 'date-fns';
 
+import { send } from 'loot-core/platform/client/fetch';
 import { getCurrency } from 'loot-core/shared/currencies';
 import * as monthUtils from 'loot-core/shared/months';
 import { getStatusLabel } from 'loot-core/shared/schedules';
@@ -59,6 +62,7 @@ import {
 import {
   amountToFormatted,
   formattedToAmount,
+  formattedToInteger,
   type IntegerAmount,
   integerToFormatted,
   titleFirst,
@@ -756,6 +760,9 @@ function PayeeIcons({
 }: PayeeIconsProps) {
   const { t } = useTranslation();
 
+  // Get default currency for accounts with null currency_code
+  const [defaultCurrency] = useSyncedPref('defaultCurrencyCode');
+
   const scheduleId = transaction.schedule;
   const { isLoading, schedules = [] } = useCachedSchedules();
 
@@ -795,23 +802,37 @@ function PayeeIcons({
         </Button>
       )}
       {transferAccount && (
-        <Button
-          variant="bare"
-          data-testid="transfer-icon"
-          aria-label={t('See transfer account')}
-          style={payeeIconButtonStyle}
-          onPress={() => {
-            if (!isTemporaryId(transaction.id)) {
-              onNavigateToTransferAccount(transferAccount.id);
-            }
-          }}
+        <Tooltip
+          content={
+            transaction.fx_rate &&
+            transaction.fx_rate !== 0 &&
+            transaction.fx_rate !== 1 ? (
+              <Trans>
+                FX Rate: {transaction.fx_rate.toFixed(6)} (
+                {transferAccount.currency_code || defaultCurrency})
+              </Trans>
+            ) : undefined
+          }
+          placement="top"
         >
-          {isDeposit ? (
-            <SvgLeftArrow2 style={transferIconStyle} />
-          ) : (
-            <SvgRightArrow2 style={transferIconStyle} />
-          )}
-        </Button>
+          <Button
+            variant="bare"
+            data-testid="transfer-icon"
+            aria-label={t('See transfer account')}
+            style={payeeIconButtonStyle}
+            onPress={() => {
+              if (!isTemporaryId(transaction.id)) {
+                onNavigateToTransferAccount(transferAccount.id);
+              }
+            }}
+          >
+            {isDeposit ? (
+              <SvgLeftArrow2 style={transferIconStyle} />
+            ) : (
+              <SvgRightArrow2 style={transferIconStyle} />
+            )}
+          </Button>
+        </Tooltip>
       )}
     </>
   );
@@ -1871,6 +1892,229 @@ function NewTransaction({
   const cancelButtonRef = useRef(null);
   useProperFocus(cancelButtonRef, focusedField === 'cancel');
 
+  // Get default currency for accounts with null currency_code
+  const [defaultCurrency] = useSyncedPref('defaultCurrencyCode');
+
+  // FX transfer state
+  const [fxRate, setFxRate] = useState<string>('');
+  const [fetchedFxRate, setFetchedFxRate] = useState<string>(''); // Track the originally fetched rate
+  const [foreignAmount, setForeignAmount] = useState<string>('');
+  const [isLoadingRate, setIsLoadingRate] = useState(false);
+  const foreignAmountUserEntered = useRef(false); // Track if foreign amount was user-entered
+
+  // Detect cross-currency transfer
+  const transaction = transactions[0];
+  const currentAccount = accounts.find(a => a.id === transaction.account);
+
+  // Get transfer account robustly, handling temporary transactions
+  const payee = transaction.payee
+    ? getPayeesById(payees)[transaction.payee]
+    : undefined;
+  const transferAccount =
+    isTemporaryId(transaction.id) && payee?.transfer_acct
+      ? getAccountsById(accounts)[payee.transfer_acct]
+      : transferAccountsByTransaction[transaction.id];
+
+  const isCrossCurrencyTransfer = useMemo(() => {
+    if (!currentAccount || !transferAccount) {
+      return false;
+    }
+    // Use default currency if currency_code is null
+    const currentCurrency = currentAccount.currency_code || defaultCurrency;
+    const transferCurrency = transferAccount.currency_code || defaultCurrency;
+    return (
+      currentCurrency !== transferCurrency &&
+      currentCurrency != null &&
+      transferCurrency != null
+    );
+  }, [currentAccount, transferAccount, defaultCurrency]);
+
+  // Fetch exchange rate when cross-currency transfer is detected
+  useEffect(() => {
+    async function fetchRate() {
+      if (!isCrossCurrencyTransfer || !currentAccount || !transferAccount) {
+        setFxRate('');
+        setForeignAmount('');
+        return;
+      }
+
+      // Use default currency if currency_code is null
+      const fromCurrency = currentAccount.currency_code || defaultCurrency;
+      const toCurrency = transferAccount.currency_code || defaultCurrency;
+      const date = transaction.date || new Date().toISOString().split('T')[0];
+
+      if (!fromCurrency || !toCurrency) {
+        return;
+      }
+
+      setIsLoadingRate(true);
+      try {
+        const rate = await send('get-exchange-rate', {
+          fromCurrency,
+          toCurrency,
+          date,
+        });
+
+        if (rate) {
+          const rateString = rate.toString();
+          setFxRate(rateString);
+          setFetchedFxRate(rateString); // Store the fetched rate for reset functionality
+
+          // Calculate foreign amount if transaction amount is set
+          if (transaction.amount && transaction.amount !== 0) {
+            const foreignAmt = Math.abs(transaction.amount) * rate;
+            setForeignAmount(integerToFormatted(Math.round(foreignAmt)));
+            // Foreign amount calculated from fetched rate, so mark as auto-calculated
+            foreignAmountUserEntered.current = false;
+          }
+        } else {
+          console.log('No exchange rate found, falling back to 1');
+          setFxRate('1');
+          setFetchedFxRate('1');
+        }
+      } catch (err) {
+        console.error('Failed to fetch exchange rate:', err);
+        setFxRate('1');
+        setFetchedFxRate('1');
+      } finally {
+        setIsLoadingRate(false);
+      }
+    }
+
+    fetchRate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- transaction.amount intentionally excluded: foreign amount calculation is handled by separate useEffect below to avoid unnecessary re-fetches
+  }, [
+    isCrossCurrencyTransfer,
+    currentAccount,
+    transferAccount,
+    defaultCurrency,
+    transaction.date,
+  ]);
+
+  // When transaction amount changes, recalculate based on what's already set
+  useEffect(() => {
+    if (
+      !transaction.amount ||
+      transaction.amount === 0 ||
+      !isCrossCurrencyTransfer
+    ) {
+      return;
+    }
+
+    // Priority 1: If foreign amount was USER-ENTERED, calculate FX rate from it
+    // (Don't recalculate if foreign amount was auto-calculated from rate, to preserve rate precision)
+    if (foreignAmount && foreignAmountUserEntered.current) {
+      const foreignAmt = formattedToInteger(foreignAmount);
+      if (foreignAmt !== null && foreignAmt !== 0) {
+        const rate = foreignAmt / Math.abs(transaction.amount);
+        setFxRate(rate.toString());
+      }
+    }
+    // Priority 2: If FX rate exists but no foreign amount, calculate foreign amount
+    else if (fxRate) {
+      const rate = parseFloat(fxRate);
+      if (!isNaN(rate) && rate > 0) {
+        const foreignAmt = Math.abs(transaction.amount) * rate;
+        setForeignAmount(integerToFormatted(Math.round(foreignAmt)));
+        // Mark as auto-calculated, not user-entered
+        foreignAmountUserEntered.current = false;
+      }
+    }
+  }, [transaction.amount, foreignAmount, fxRate, isCrossCurrencyTransfer]);
+
+  // Auto-calculate foreign amount when rate and transaction amount change
+  useEffect(() => {
+    if (
+      !fxRate ||
+      !transaction.amount ||
+      transaction.amount === 0 ||
+      foreignAmount // Don't overwrite if user has entered a value
+    ) {
+      return;
+    }
+
+    const rate = parseFloat(fxRate);
+    if (isNaN(rate) || rate <= 0) {
+      return;
+    }
+
+    const foreignAmt = Math.abs(transaction.amount) * rate;
+    setForeignAmount(integerToFormatted(Math.round(foreignAmt)));
+    // Mark as auto-calculated, not user-entered
+    foreignAmountUserEntered.current = false;
+  }, [fxRate, transaction.amount, foreignAmount]);
+
+  const { t } = useTranslation();
+
+  // Handle FX rate change - recalculate foreign amount
+  function handleFxRateChange(value: string) {
+    setFxRate(value);
+
+    // If we have both rate and transaction amount, calculate foreign amount
+    if (transaction.amount && transaction.amount !== 0 && value) {
+      const rate = parseFloat(value);
+      if (!isNaN(rate) && rate > 0) {
+        const foreignAmt = Math.abs(transaction.amount) * rate;
+        setForeignAmount(integerToFormatted(Math.round(foreignAmt)));
+        // Foreign amount calculated from user-entered rate, so mark as auto-calculated
+        foreignAmountUserEntered.current = false;
+      }
+    }
+  }
+
+  // Handle foreign amount change - recalculate FX rate
+  function handleForeignAmountChange(value: string) {
+    setForeignAmount(value);
+    // Mark that the foreign amount was user-entered
+    foreignAmountUserEntered.current = true;
+
+    // If we have both foreign amount and transaction amount, calculate rate
+    if (transaction.amount && transaction.amount !== 0 && value) {
+      const foreignAmt = formattedToInteger(value);
+      if (foreignAmt !== null && foreignAmt !== 0) {
+        const rate = foreignAmt / Math.abs(transaction.amount);
+        setFxRate(rate.toString());
+      }
+    }
+  }
+
+  // Wrapped onAdd to include fx_rate
+  function handleAdd() {
+    // If this is a cross-currency transfer, include fx_rate
+    if (isCrossCurrencyTransfer && fxRate) {
+      const rate = parseFloat(fxRate);
+      if (!isNaN(rate) && rate > 0) {
+        // Add fx_rate to the transaction
+        transactions[0].fx_rate = rate;
+      }
+    }
+    onAdd();
+  }
+
+  // Reset FX rate to the fetched rate and recalculate foreign amount
+  function handleResetFxRate() {
+    if (!fetchedFxRate) {
+      return;
+    }
+
+    setFxRate(fetchedFxRate);
+
+    // Recalculate foreign amount from transaction amount using fetched rate
+    if (transaction.amount && transaction.amount !== 0) {
+      const rate = parseFloat(fetchedFxRate);
+      if (!isNaN(rate) && rate > 0) {
+        const foreignAmt = Math.abs(transaction.amount) * rate;
+        setForeignAmount(integerToFormatted(Math.round(foreignAmt)));
+        // Foreign amount calculated from reset, so mark as auto-calculated
+        foreignAmountUserEntered.current = false;
+      }
+    }
+  }
+
+  // Check if the rate has been modified from the fetched rate
+  const isRateModified =
+    fetchedFxRate && fxRate && fxRate !== fetchedFxRate && !isLoadingRate;
+
   return (
     <View
       style={{
@@ -1930,8 +2174,98 @@ function NewTransaction({
           justifyContent: 'flex-end',
           marginTop: 6,
           marginRight: 20,
+          gap: 10,
         }}
       >
+        {isCrossCurrencyTransfer && currentAccount && transferAccount && (
+          <>
+            <Text
+              style={{
+                color: theme.pageTextLight,
+              }}
+            >
+              <Trans>
+                {currentAccount.currency_code || defaultCurrency} →{' '}
+                {transferAccount.currency_code || defaultCurrency} Exchange
+                Rate:
+              </Trans>
+            </Text>
+            <View
+              style={{
+                position: 'relative',
+                display: 'flex',
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 5,
+              }}
+            >
+              <Input
+                type="text"
+                inputMode="decimal"
+                value={fxRate}
+                onChange={e => handleFxRateChange(e.target.value)}
+                disabled={isLoadingRate}
+                placeholder={isLoadingRate ? t('Loading...') : ''}
+                style={{
+                  width: '120px',
+                  padding: '4px 8px',
+                  textAlign: 'right',
+                }}
+              />
+              {isRateModified && (
+                <Tooltip
+                  content={t('Reset to fetched rate')}
+                  placement="top"
+                  style={{ padding: '5px 10px' }}
+                >
+                  <Button
+                    variant="bare"
+                    aria-label={t('Reset exchange rate')}
+                    onPress={handleResetFxRate}
+                    style={{
+                      padding: '2px',
+                      width: '24px',
+                      height: '24px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <SvgRefreshArrow
+                      style={{
+                        width: 13,
+                        height: 13,
+                        color: theme.pageTextLight,
+                      }}
+                    />
+                  </Button>
+                </Tooltip>
+              )}
+            </View>
+            <Text
+              style={{
+                color: theme.pageTextLight,
+              }}
+            >
+              <Trans>
+                {transferAccount.currency_code || defaultCurrency} Amount:
+              </Trans>
+            </Text>
+            <Input
+              type="text"
+              inputMode="decimal"
+              value={foreignAmount}
+              onChange={e => handleForeignAmountChange(e.target.value)}
+              disabled={isLoadingRate}
+              placeholder={isLoadingRate ? t('Loading...') : ''}
+              style={{
+                width: '120px',
+                padding: '4px 8px',
+                textAlign: 'right',
+              }}
+            />
+          </>
+        )}
         <Button
           style={{ marginRight: 10, padding: '4px 10px' }}
           onPress={() => onClose()}
@@ -1954,7 +2288,7 @@ function NewTransaction({
           <Button
             variant="primary"
             style={{ padding: '4px 10px' }}
-            onPress={onAdd}
+            onPress={handleAdd}
             data-testid="add-button"
             ref={addButtonRef}
           >

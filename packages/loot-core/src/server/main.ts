@@ -133,6 +133,14 @@ handlers['get-openexchangerates-usage'] = async function () {
   return exchangeRateService.getOpenExchangeRatesUsage();
 };
 
+handlers['get-exchange-rate'] = async function ({
+  fromCurrency,
+  toCurrency,
+  date,
+}) {
+  return exchangeRateService.getRate(fromCurrency, toCurrency, date);
+};
+
 handlers = installAPI(handlers) as Handlers;
 
 injectAPI.override((name, args) => runHandler(app.handlers[name], args));

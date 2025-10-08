@@ -32,4 +32,10 @@ export interface ServerHandlers {
     daysRemaining: number;
     dailyAverage: number;
   } | null>;
+
+  'get-exchange-rate': (arg: {
+    fromCurrency: string;
+    toCurrency: string;
+    date?: string;
+  }) => Promise<number | null>;
 }

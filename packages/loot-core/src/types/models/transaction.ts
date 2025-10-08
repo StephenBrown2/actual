@@ -20,6 +20,7 @@ export interface TransactionEntity {
   imported_payee?: string;
   starting_balance_flag?: boolean;
   transfer_id?: TransactionEntity['id'];
+  fx_rate?: number;
   sort_order?: number;
   cleared?: boolean;
   reconciled?: boolean;
