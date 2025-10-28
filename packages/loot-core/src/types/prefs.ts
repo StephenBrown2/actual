@@ -23,6 +23,8 @@ export type SyncedPrefs = Partial<
     | 'defaultCurrencyCode'
     | 'enableMultiCurrency'
     | 'enableMultiCurrencyOnBudget'
+    | 'mempoolSpaceBaseUrl'
+    | 'openExchangeRatesAppId'
     | 'plugins'
     | `show-account-${string}-net-worth-chart`
     | `side-nav.show-balance-history-${string}`

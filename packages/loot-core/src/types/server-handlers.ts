@@ -22,4 +22,14 @@ export interface ServerHandlers {
   }) => Promise<{ error?: string }>;
 
   'app-focused': () => Promise<void>;
+
+  'get-openexchangerates-usage': () => Promise<{
+    planName: string;
+    quota: string;
+    requests: number;
+    requestsQuota: number;
+    requestsRemaining: number;
+    daysRemaining: number;
+    dailyAverage: number;
+  } | null>;
 }
