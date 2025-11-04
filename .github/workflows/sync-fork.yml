@@ -105,8 +105,8 @@ jobs:
       - name: Sync master branch with upstream tag
         if: steps.check_tags.outputs.new_tags == 'true'
         run: |
-          # Checkout master and sync with the latest upstream tag
-          git checkout master
+          # Checkout master from origin explicitly to avoid ambiguity
+          git checkout -B master origin/master
           git reset --hard ${{ steps.check_tags.outputs.latest_tag }}
 
           # Fetch all tags from upstream
@@ -118,8 +118,8 @@ jobs:
         if: steps.check_tags.outputs.new_tags == 'true'
         id: rebase
         run: |
-          # Checkout main branch
-          git checkout main
+          # Checkout main branch from origin explicitly to avoid ambiguity
+          git checkout -B main origin/main
 
           # Attempt to rebase on the latest tag (not master branch tip)
           if git rebase ${{ steps.check_tags.outputs.latest_tag }}; then
@@ -159,7 +159,7 @@ jobs:
           gh label create "automated" --description "Created by automation" --color "0e8a16" --force
 
           # Create a new branch from master for conflict resolution
-          git checkout master
+          git checkout -B master origin/master
           git checkout -b "${BRANCH_NAME}"
 
           # Push the branch (this will be the base for manual work)
