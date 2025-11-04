@@ -1,0 +1,260 @@
+name: Sync Fork with Upstream
+
+on:
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # Only run in the specified fork, not in other forks or upstream
+    if: github.repository == 'StephenBrown2/actual'
+    permissions:
+      contents: write # Required to push branches and tags
+      pull-requests: write # Required to create PRs on conflict
+      issues: read # Required to check for existing PRs
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6-beta
+        with:
+          fetch-depth: 0 # Fetch all history for all branches and tags
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: true # Ensure token is available for git operations
+
+      - name: Configure Git bot user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/actualbudget/actual.git ||\
+          git remote set-url upstream https://github.com/actualbudget/actual.git
+
+      - name: Fetch upstream
+        run: |
+          git fetch upstream --tags
+          git fetch origin --tags
+
+      - name: Check for new upstream tags
+        id: check_tags
+        run: |
+          # Get latest upstream tag directly from remote
+          UPSTREAM_LATEST_TAG=$(git ls-remote --tags upstream | grep -oP 'refs/tags/v\d+\.\d+\.\d+$' | sed 's|refs/tags/||' | sort -V | tail -n1)
+          echo "Latest upstream tag: $UPSTREAM_LATEST_TAG"
+
+          # Check if we found an upstream tag
+          if [ -z "$UPSTREAM_LATEST_TAG" ]; then
+            echo "❌ ERROR: No tags found in upstream repository!"
+            exit 1
+          fi
+
+          # Get latest tag from origin remote
+          ORIGIN_LATEST_TAG=$(git ls-remote --tags origin | grep -oP 'refs/tags/v\d+\.\d+\.\d+$' | sed 's|refs/tags/||' | sort -V | tail -n1)
+
+          if [ -z "$ORIGIN_LATEST_TAG" ]; then
+            echo "ℹ️ No tags found on origin remote - first sync needed"
+            echo "⚠️ Tag $UPSTREAM_LATEST_TAG does NOT exist on origin remote"
+            ORIGIN_HAS_TAG=false
+          elif [ "$UPSTREAM_LATEST_TAG" != "$ORIGIN_LATEST_TAG" ]; then
+            echo "ℹ️ Latest tag on origin remote: $ORIGIN_LATEST_TAG"
+            echo "✅ New tag detected: $UPSTREAM_LATEST_TAG (origin has: $ORIGIN_LATEST_TAG)"
+            ORIGIN_HAS_TAG=false
+          else
+            echo "✅ Tag $UPSTREAM_LATEST_TAG already exists on origin remote"
+            ORIGIN_HAS_TAG=true
+          fi
+
+          # Determine if sync is needed
+          if [ "$ORIGIN_HAS_TAG" = "false" ]; then
+            echo "new_tags=true" >> $GITHUB_OUTPUT
+            echo "latest_tag=$UPSTREAM_LATEST_TAG" >> $GITHUB_OUTPUT
+          else
+            echo "ℹ️ No new tags (current: $ORIGIN_LATEST_TAG)"
+            echo "new_tags=false" >> $GITHUB_OUTPUT
+            echo "latest_tag=$ORIGIN_LATEST_TAG" >> $GITHUB_OUTPUT
+          fi
+
+          # Check commit difference between origin and upstream
+          UPSTREAM_COMMIT=$(git rev-parse upstream/master)
+          ORIGIN_COMMIT=$(git rev-parse origin/master)
+
+          if [ "$UPSTREAM_COMMIT" != "$ORIGIN_COMMIT" ]; then
+            # Count commits that origin is behind upstream
+            COMMITS_BEHIND=$(git rev-list --count origin/master..upstream/master)
+            # Count commits that upstream is behind origin (if any)
+            COMMITS_AHEAD=$(git rev-list --count upstream/master..origin/master)
+
+            echo "commits_ahead=true" >> $GITHUB_OUTPUT
+            echo "commits_count=$COMMITS_BEHIND" >> $GITHUB_OUTPUT
+
+            if [ "$COMMITS_AHEAD" -gt 0 ]; then
+              echo "⚠️ Origin is $COMMITS_BEHIND commit(s) behind and $COMMITS_AHEAD commit(s) ahead of upstream/master"
+            else
+              echo "ℹ️ Origin is $COMMITS_BEHIND commit(s) behind upstream/master"
+            fi
+          else
+            echo "commits_ahead=false" >> $GITHUB_OUTPUT
+            echo "commits_count=0" >> $GITHUB_OUTPUT
+            echo "✅ Origin and upstream are in sync"
+          fi
+
+      - name: Sync master branch with upstream tag
+        if: steps.check_tags.outputs.new_tags == 'true'
+        run: |
+          # Checkout master and sync with the latest upstream tag
+          git checkout master
+          git reset --hard ${{ steps.check_tags.outputs.latest_tag }}
+
+          # Fetch all tags from upstream
+          git fetch upstream --tags
+
+          echo "Master branch synced with upstream tag: ${{ steps.check_tags.outputs.latest_tag }}"
+
+      - name: Rebase main branch on latest tag
+        if: steps.check_tags.outputs.new_tags == 'true'
+        id: rebase
+        run: |
+          # Checkout main branch
+          git checkout main
+
+          # Attempt to rebase on the latest tag (not master branch tip)
+          if git rebase ${{ steps.check_tags.outputs.latest_tag }}; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "Main branch successfully rebased on tag ${{ steps.check_tags.outputs.latest_tag }}"
+          else
+            echo "status=conflict" >> $GITHUB_OUTPUT
+            echo "Rebase conflict detected"
+            git rebase --abort
+            exit 1
+          fi
+
+      - name: Push to fork
+        if: steps.rebase.outputs.status == 'success'
+        run: |
+          # Push master branch
+          git push origin master --force-with-lease
+
+          # Push main branch
+          git push origin main --force-with-lease
+
+          # Push all tags
+          git push origin --tags
+
+          echo "Successfully pushed master and main branches to fork"
+
+      - name: Create conflict resolution PR
+        if: failure() && steps.rebase.outputs.status == 'conflict'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LATEST_TAG="${{ steps.check_tags.outputs.latest_tag }}"
+          BRANCH_NAME="sync/conflict-resolution-${LATEST_TAG}"
+
+          # Ensure labels exist
+          gh label create "sync-conflict" --description "Automatic sync encountered a conflict" --color "d73a4a" --force
+          gh label create "automated" --description "Created by automation" --color "0e8a16" --force
+
+          # Create a new branch from master for conflict resolution
+          git checkout master
+          git checkout -b "${BRANCH_NAME}"
+
+          # Push the branch (this will be the base for manual work)
+          git push origin "${BRANCH_NAME}"
+
+          # Create PR body with instructions
+          cat > pr_body.md << 'EOF'
+          ## 🚨 Fork Sync Conflict Resolution Required
+
+          The automatic fork sync workflow encountered a rebase conflict while trying to rebase the `main` branch on top of tag `${{ steps.check_tags.outputs.latest_tag }}`.
+
+          ### Resolution Steps
+
+          ```bash
+          # Fetch and checkout this branch
+          git fetch origin
+          git checkout $BRANCH_NAME
+
+          # Get the latest upstream tag
+          git remote add upstream https://github.com/actualbudget/actual.git || true
+          git fetch upstream --all --tags
+
+          # Cherry-pick or merge your changes from main
+          git checkout main
+          git log ${{ steps.check_tags.outputs.latest_tag }}..HEAD --oneline  # Review your custom commits
+
+          # Return to conflict resolution branch
+          git checkout $BRANCH_NAME
+
+          # Rebase and resolve conflicts
+          git rebase ${{ steps.check_tags.outputs.latest_tag }}
+
+          # Or alternatively, cherry-pick specific commits:
+          # git cherry-pick <commit-sha>
+
+          # After resolving conflicts:
+          git push origin $BRANCH_NAME --force-with-lease
+          ```
+
+          ### Once Resolved
+
+          1. Merge this PR to `main`
+          2. Update your `master` branch:
+             ```bash
+             git checkout master
+             git reset --hard ${{ steps.check_tags.outputs.latest_tag }}
+             git push origin master --force-with-lease
+             ```
+          3. Push all tags: `git push origin --tags`
+
+          ---
+
+          **Latest Tag:** `${{ steps.check_tags.outputs.latest_tag }}`
+          **Workflow Run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EOF
+
+          # Check if PR already exists
+          EXISTING_PR=$(gh pr list --head "${BRANCH_NAME}" --state open --json number --jq '.[0].number' || echo "")
+
+          if [ -z "$EXISTING_PR" ]; then
+            # Create the PR
+            gh pr create \
+              --title "🚨 Resolve sync conflict with ${LATEST_TAG}" \
+              --body-file pr_body.md \
+              --base main \
+              --head "${BRANCH_NAME}" \
+              --label "sync-conflict,automated" \
+              --reviewer StephenBrown2
+
+            echo "Created PR for conflict resolution on branch ${BRANCH_NAME}"
+          else
+            echo "PR #${EXISTING_PR} already exists for branch ${BRANCH_NAME}"
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Sync Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.check_tags.outputs.new_tags }}" == "true" ]; then
+            echo "✅ New tag detected in upstream: **${{ steps.check_tags.outputs.latest_tag }}**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "ℹ️ No new tags detected (current: ${{ steps.check_tags.outputs.latest_tag }})" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ steps.check_tags.outputs.commits_ahead }}" == "true" ]; then
+            echo "ℹ️ Origin is **${{ steps.check_tags.outputs.commits_count }}** commit(s) behind upstream/master" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ steps.rebase.outputs.status }}" == "success" ]; then
+            echo "✅ Successfully rebased main on tag ${{ steps.check_tags.outputs.latest_tag }}" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Pushed master and main to fork" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.rebase.outputs.status }}" == "conflict" ]; then
+            echo "❌ Rebase conflict - PR created for manual resolution" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "ℹ️ No sync required" >> $GITHUB_STEP_SUMMARY
+          fi
