@@ -151,6 +151,14 @@ export default defineConfig(async ({ mode }) => {
     },
     resolve: {
       extensions: resolveExtensions,
+      // Dedupe React packages to ensure single instances and resolve peer dependency issues
+      dedupe: ['react', 'react-dom', 'react-is'],
+      alias: {
+        // Redirect vite-plugin-node-polyfills process shim to our own build shims
+        'vite-plugin-node-polyfills/shims/process': path.resolve(
+          './src/build-shims.js',
+        ),
+      },
     },
     plugins: [
       // electron (desktop) builds do not support PWA
@@ -178,6 +186,7 @@ export default defineConfig(async ({ mode }) => {
             devOptions: {
               enabled: true, // We need service worker in dev mode to work with plugins
               type: 'module',
+              suppressWarnings: true, // Suppress glob pattern warnings in dev mode
             },
             workbox: {
               globPatterns: [
@@ -220,6 +229,15 @@ export default defineConfig(async ({ mode }) => {
         return type === 'stderr';
       },
       maxWorkers: 2,
+    },
+    // Help Vite resolve transitive dependencies with pnpm/yarn berry pnpm linker
+    optimizeDeps: {
+      include: [
+        'react-grid-layout',
+        'react-draggable',
+        'recharts',
+        'react-is',
+      ],
     },
   } satisfies UserConfig;
 });

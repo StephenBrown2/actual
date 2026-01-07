@@ -1,9 +1,20 @@
 import path from 'path';
+import { createRequire } from 'module';
 
+import alias from '@rollup/plugin-alias';
 import { visualizer } from 'rollup-plugin-visualizer';
 import { defineConfig } from 'vite';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import peggyLoader from 'vite-plugin-peggy-loader';
+
+const require = createRequire(import.meta.url);
+
+// Pre-resolve shim paths for pnpm linker compatibility
+const shimPaths = {
+  process: require.resolve('vite-plugin-node-polyfills/shims/process'),
+  buffer: require.resolve('vite-plugin-node-polyfills/shims/buffer'),
+  global: require.resolve('vite-plugin-node-polyfills/shims/global'),
+};
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -26,6 +37,15 @@ export default defineConfig(({ mode }) => {
           isDev ? 'kcab.worker.dev.js' : `kcab.worker.[hash].js`,
       },
       rollupOptions: {
+        plugins: [
+          alias({
+            entries: [
+              { find: 'vite-plugin-node-polyfills/shims/process', replacement: shimPaths.process },
+              { find: 'vite-plugin-node-polyfills/shims/buffer', replacement: shimPaths.buffer },
+              { find: 'vite-plugin-node-polyfills/shims/global', replacement: shimPaths.global },
+            ],
+          }),
+        ],
         onwarn(warning, warn) {
           // Suppress sourcemap warnings from peggy-loader
           if (
@@ -70,12 +90,20 @@ export default defineConfig(({ mode }) => {
         '.tsx',
         '.json',
       ],
-      alias: [
-        {
-          find: /^@actual-app\/crdt(\/.*)?$/,
-          replacement: path.resolve(crdtDir, 'src') + '$1',
-        },
-      ],
+      alias: {
+        // Resolve vite-plugin-node-polyfills shims for pnpm linker compatibility
+        'vite-plugin-node-polyfills/shims/process': require.resolve(
+          'vite-plugin-node-polyfills/shims/process',
+        ),
+        'vite-plugin-node-polyfills/shims/buffer': require.resolve(
+          'vite-plugin-node-polyfills/shims/buffer',
+        ),
+        'vite-plugin-node-polyfills/shims/global': require.resolve(
+          'vite-plugin-node-polyfills/shims/global',
+        ),
+        // CRDT package alias
+        '@actual-app/crdt': path.resolve(crdtDir, 'src'),
+      },
     },
     define: {
       'process.env': '{}',
