@@ -158,10 +158,12 @@ __metadata:
     "@types/react-dom": "npm:^19.2.3"
     "@types/react-grid-layout": "npm:^1"
     "@types/react-modal": "npm:^3.16.3"
+    "@types/webscopeio__react-textarea-autocomplete": "npm:^4.7.5"
     "@uiw/react-codemirror": "npm:^4.25.3"
     "@use-gesture/react": "npm:^10.3.1"
     "@vitejs/plugin-basic-ssl": "npm:^2.1.0"
     "@vitejs/plugin-react": "npm:^5.1.1"
+    "@webscopeio/react-textarea-autocomplete": "npm:^4.9.2"
     auto-text-size: "npm:^0.2.3"
     babel-plugin-react-compiler: "npm:^1.0.0"
     cmdk: "npm:^1.1.1"
@@ -9233,6 +9235,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/webscopeio__react-textarea-autocomplete@npm:^4.7.5":
+  version: 4.7.5
+  resolution: "@types/webscopeio__react-textarea-autocomplete@npm:4.7.5"
+  dependencies:
+    "@types/react": "npm:*"
+  checksum: 10/d0b59a63aebf290a2253113a8235ac196486af4224801cded3334caa6430e5ee0b08cf1125838e5723a321ac41b5c46546162701604210d7fa31ddcf1bf96d60
+  languageName: node
+  linkType: hard
+
 "@types/ws@npm:^8.5.10":
   version: 8.18.1
   resolution: "@types/ws@npm:8.18.1"
@@ -9764,6 +9775,20 @@ __metadata:
     "@webassemblyjs/ast": "npm:1.14.1"
     "@xtuc/long": "npm:4.2.2"
   checksum: 10/cef09aad2fcd291bfcf9efdae2ea1e961a1ba0f925d1d9dcdd8c746d32fbaf431b6d26a0241699c0e39f82139018aa720b4ceb84ac6f4c78f13072747480db69
+  languageName: node
+  linkType: hard
+
+"@webscopeio/react-textarea-autocomplete@npm:^4.9.2":
+  version: 4.9.2
+  resolution: "@webscopeio/react-textarea-autocomplete@npm:4.9.2"
+  dependencies:
+    custom-event: "npm:^1.0.1"
+    textarea-caret: "npm:3.0.2"
+  peerDependencies:
+    prop-types: ^15.0.0
+    react: ^16.0.0 || ^17 || ^18
+    react-dom: ^16.0.0 || ^17 || ^18
+  checksum: 10/0cfa14c58ea7dfe22afdc1146ee722b405b098be0ecee1955bfd300d3562ed9bd6c868071eef97650d3aec5da0896f76419667a9585d288e4204cc42e887810b
   languageName: node
   linkType: hard
 
@@ -12760,6 +12785,13 @@ __metadata:
   version: 6.6.0
   resolution: "csv-stringify@npm:6.6.0"
   checksum: 10/8ff6340c9352e85974961ee8719de1dc725e7d2cb7085a02c641bbe71a2c3eec6868e2bb296201d239d855df280952da5336cfd01a46db0c66e54597d753e7d6
+  languageName: node
+  linkType: hard
+
+"custom-event@npm:^1.0.1":
+  version: 1.0.1
+  resolution: "custom-event@npm:1.0.1"
+  checksum: 10/9871fe460f6133639087716cb5a0d1738add3ced72a4c7e105a77022c6f17be15cd9f21b328dc7d064887ebbf400cff6047fde74654c0bd1d6a1e21c2af21a9c
   languageName: node
   linkType: hard
 
@@ -25941,6 +25973,13 @@ __metadata:
   version: 1.0.0
   resolution: "text-hex@npm:1.0.0"
   checksum: 10/1138f68adc97bf4381a302a24e2352f04992b7b1316c5003767e9b0d3367ffd0dc73d65001ea02b07cd0ecc2a9d186de0cf02f3c2d880b8a522d4ccb9342244a
+  languageName: node
+  linkType: hard
+
+"textarea-caret@npm:3.0.2":
+  version: 3.0.2
+  resolution: "textarea-caret@npm:3.0.2"
+  checksum: 10/5cbb6b275bfe525c64f8418ff6c717f631e0c1b1e9d3555215274d59b3f4484bc2c0df6daed42fe58d8840654b9a99b68357bf62a2fc4c90bd2fa96ac8329cf3
   languageName: node
   linkType: hard
 

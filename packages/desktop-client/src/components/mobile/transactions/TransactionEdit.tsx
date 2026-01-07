@@ -63,6 +63,7 @@ import {
 
 import { FocusableAmountInput } from './FocusableAmountInput';
 
+import { NotesInput } from '@desktop-client/components/common/NotesInput';
 import { MobileBackButton } from '@desktop-client/components/mobile/MobileBackButton';
 import {
   FieldLabel,
@@ -489,16 +490,17 @@ const ChildTransactionEdit = forwardRef<
 
         <View>
           <FieldLabel title={t('Notes')} />
-          <InputField
+          <NotesInput
+            value={transaction.notes || ''}
             disabled={
               !!editingField &&
               editingField !== getFieldName(transaction.id, 'notes')
             }
-            defaultValue={transaction.notes}
             onFocus={() =>
               onRequestActiveEdit(getFieldName(transaction.id, 'notes'))
             }
             onUpdate={value => onUpdate(transaction, 'notes', value)}
+            variant="mobile"
           />
         </View>
 
@@ -1234,12 +1236,12 @@ const TransactionEditInner = memo<TransactionEditInnerProps>(
 
           <View>
             <FieldLabel title={t('Notes')} />
-            <InputField
+            <NotesInput
+              value={transaction.notes || ''}
               disabled={
                 !!editingField &&
                 editingField !== getFieldName(transaction.id, 'notes')
               }
-              defaultValue={transaction.notes}
               onFocus={() => {
                 onRequestActiveEdit(getFieldName(transaction.id, 'notes'));
               }}
@@ -1247,6 +1249,7 @@ const TransactionEditInner = memo<TransactionEditInnerProps>(
               onChange={event =>
                 onUpdateInner(transaction, 'notes', event.target.value)
               }
+              variant="mobile"
             />
           </View>
 

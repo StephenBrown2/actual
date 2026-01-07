@@ -89,6 +89,7 @@ import { getCategoriesById } from '@desktop-client/budget/budgetSlice';
 import { AccountAutocomplete } from '@desktop-client/components/autocomplete/AccountAutocomplete';
 import { CategoryAutocomplete } from '@desktop-client/components/autocomplete/CategoryAutocomplete';
 import { PayeeAutocomplete } from '@desktop-client/components/autocomplete/PayeeAutocomplete';
+import { NotesInput } from '@desktop-client/components/common/NotesInput';
 import {
   getStatusProps,
   type StatusTypes,
@@ -1386,7 +1387,7 @@ const Transaction = memo(function Transaction({
         />
       ))()}
 
-      <InputCell
+      <CustomCell
         width="flex"
         name="notes"
         textAlign="flex"
@@ -1398,11 +1399,19 @@ const Transaction = memo(function Transaction({
           NotesTagFormatter({ notes: value, onNotesTagClick })
         }
         onExpose={name => !isPreview && onEdit(id, name)}
-        inputProps={{
-          value: notes || '',
-          onUpdate: onUpdate.bind(null, 'notes'),
-        }}
-      />
+        onUpdate={value => onUpdate('notes', value)}
+      >
+        {({ onBlur, onKeyDown, shouldSaveFromKey }) => (
+          <NotesInput
+            value={notes || ''}
+            onUpdate={value => onUpdate('notes', value)}
+            onBlur={onBlur}
+            onKeyDown={onKeyDown}
+            shouldSaveFromKey={shouldSaveFromKey}
+            focused={focusedField === 'notes'}
+          />
+        )}
+      </CustomCell>
 
       {(isPreview && !isChild) || isParent ? (
         <Cell
