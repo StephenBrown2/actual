@@ -42,6 +42,10 @@ export function Schedules() {
     dispatch(pushModal({ modal: { name: 'schedules-discover' } }));
   }, [dispatch]);
 
+  const onImportExport = useCallback(() => {
+    dispatch(pushModal({ modal: { name: 'schedules-import-export' } }));
+  }, [dispatch]);
+
   const onChangeUpcomingLength = useCallback(() => {
     dispatch(pushModal({ modal: { name: 'schedules-upcoming-length' } }));
   }, [dispatch]);
@@ -139,6 +143,9 @@ export function Schedules() {
           >
             <Button onPress={onDiscover}>
               <Trans>Find schedules</Trans>
+            </Button>
+            <Button onPress={onImportExport}>
+              <Trans>Import / Export</Trans>
             </Button>
             <Button onPress={onChangeUpcomingLength}>
               <Trans>Change upcoming length</Trans>
