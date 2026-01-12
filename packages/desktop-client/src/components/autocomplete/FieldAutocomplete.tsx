@@ -1,6 +1,8 @@
-import React, { type CSSProperties, useMemo } from 'react';
+import React, { useMemo } from 'react';
+import type { CSSProperties } from 'react';
 
-import { Autocomplete, type AutocompleteItem } from './Autocomplete';
+import { Autocomplete } from './Autocomplete';
+import type { AutocompleteItem } from './Autocomplete';
 
 type FieldAutocompleteProps = {
   style?: CSSProperties;
@@ -45,7 +47,7 @@ export function FieldAutocomplete({
   return (
     <Autocomplete
       type="multi"
-      strict={true}
+      strict
       suggestions={suggestions}
       value={validValue}
       onSelect={onChange}
