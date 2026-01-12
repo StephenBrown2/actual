@@ -293,6 +293,9 @@ export type Modal =
       name: 'schedules-discover';
     }
   | {
+      name: 'import-wallos';
+    }
+  | {
       name: 'schedule-posts-offline-notification';
     }
   | {
