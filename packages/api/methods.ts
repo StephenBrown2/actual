@@ -446,6 +446,14 @@ export function getScheduleDates(
   return send('api/schedule-dates-get', { date, ...options });
 }
 
+export function exportSchedules() {
+  return send('api/schedules-export');
+}
+
+export function importSchedules(content: string) {
+  return send('api/schedules-import', { content });
+}
+
 export function getIDByName(
   type: 'accounts' | 'schedules' | 'categories' | 'payees',
   name: string,

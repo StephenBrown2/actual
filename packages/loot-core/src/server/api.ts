@@ -40,7 +40,11 @@ import {
   scheduleModel,
   tagModel,
 } from './api-models';
-import type { AmountOPType, APIScheduleEntity } from './api-models';
+import type {
+  AmountOPType,
+  APIScheduleEntity,
+  APIScheduleImportResult,
+} from './api-models';
 import { aqlQuery } from './aql';
 import { isTrackingBudget } from './budget/actions';
 import * as cloudStorage from './cloud-storage';
@@ -1019,6 +1023,28 @@ handlers['api/schedule-dates-get'] = async function ({
     throw APIError(`Cannot expand schedule date: ${error.message}`);
   }
 };
+
+handlers['api/schedules-export'] = async function () {
+  checkFileOpen();
+  const out = await handlers['schedule/export-json']();
+  if ('error' in out && out.error) {
+    throw APIError(`Failed exporting schedules: ${out.error}`);
+  }
+  return out.data.toString('utf8');
+};
+
+handlers['api/schedules-import'] = withMutation(async function ({
+  content,
+}: {
+  content: string;
+}): Promise<APIScheduleImportResult> {
+  checkFileOpen();
+  const result = await handlers['schedule/import-json']({ content });
+  if ('error' in result && result.error) {
+    throw APIError(`Failed importing schedules: ${result.error}`);
+  }
+  return result as APIScheduleImportResult;
+});
 
 handlers['api/schedule-create'] = withMutation(async function (
   schedule: Omit<APIScheduleEntity, 'id'>,
