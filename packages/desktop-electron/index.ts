@@ -616,18 +616,21 @@ ipcMain.handle(
   ) => {
     const fileLocation = await dialog.showSaveDialog({ title, defaultPath });
 
-    return new Promise<void>((resolve, reject) => {
-      if (fileLocation) {
-        const contents =
-          typeof fileContents === 'string'
-            ? fileContents
-            : new Uint8Array(fileContents.buffer);
+    if (!fileLocation.canceled && fileLocation.filePath) {
+      const contents =
+        typeof fileContents === 'string'
+          ? fileContents
+          : new Uint8Array(fileContents.buffer);
+      await new Promise<void>((resolve, reject) => {
         fs.writeFile(fileLocation.filePath, contents, error => {
-          return reject(error);
+          if (error) {
+            reject(error);
+          } else {
+            resolve();
+          }
         });
-      }
-      resolve();
-    });
+      });
+    }
   },
 );
 
