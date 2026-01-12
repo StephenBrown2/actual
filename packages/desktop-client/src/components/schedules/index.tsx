@@ -6,6 +6,7 @@ import { Button } from '@actual-app/components/button';
 import { SvgAdd } from '@actual-app/components/icons/v1';
 import {
   SvgCalendar,
+  SvgDownloadThickBottom,
   SvgSearchAlternate,
 } from '@actual-app/components/icons/v2';
 import { theme } from '@actual-app/components/theme';
@@ -48,6 +49,10 @@ export function Schedules() {
 
   const onDiscover = useCallback(() => {
     dispatch(pushModal({ modal: { name: 'schedules-discover' } }));
+  }, [dispatch]);
+
+  const onImportExport = useCallback(() => {
+    dispatch(pushModal({ modal: { name: 'schedules-import-export' } }));
   }, [dispatch]);
 
   const onChangeUpcomingLength = useCallback(() => {
@@ -116,12 +121,17 @@ export function Schedules() {
           />
         }
         menu={
-          <PageMenuButton<'discover' | 'upcoming-length'>
+          <PageMenuButton<'discover' | 'import-export' | 'upcoming-length'>
             items={[
               {
                 name: 'discover',
                 text: t('Find schedules'),
                 icon: SvgSearchAlternate,
+              },
+              {
+                name: 'import-export',
+                text: t('Import / Export'),
+                icon: SvgDownloadThickBottom,
               },
               {
                 name: 'upcoming-length',
@@ -132,6 +142,8 @@ export function Schedules() {
             onMenuSelect={name => {
               if (name === 'discover') {
                 onDiscover();
+              } else if (name === 'import-export') {
+                onImportExport();
               } else {
                 onChangeUpcomingLength();
               }

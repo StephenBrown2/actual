@@ -20,6 +20,7 @@ import type {
   APIPayeeEntity,
   APIRuleEntity,
   APIScheduleEntity,
+  APIScheduleImportResult,
   APITagEntity,
   APITransactionUpdateFields,
 } from '#server/api-models';
@@ -368,6 +369,10 @@ export type ApiHandlers = {
     count?: number;
   }) => Promise<string[]>;
 
+  'api/schedules-export': () => Promise<string>;
+  'api/schedules-import': (arg: {
+    content: string;
+  }) => Promise<APIScheduleImportResult>;
   'api/get-id-by-name': (arg: {
     type: string;
     name: string;
