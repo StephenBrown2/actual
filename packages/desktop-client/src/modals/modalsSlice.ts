@@ -339,6 +339,18 @@ export type Modal =
       name: 'schedules-discover';
     }
   | {
+      name: 'import-wallos';
+    }
+  | {
+      name: 'schedules-import-export';
+    }
+  | {
+      name: 'export-schedules-json';
+    }
+  | {
+      name: 'import-schedules-json';
+    }
+  | {
       name: 'schedule-posts-offline-notification';
     }
   | {

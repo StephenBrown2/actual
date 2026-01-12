@@ -10,6 +10,7 @@ import type {
   APIPayeeEntity,
   APIRuleEntity,
   APIScheduleEntity,
+  APIScheduleImportResult,
   APITagEntity,
 } from '#server/api-models';
 import type { BudgetFileHandlers } from '#server/budgetfiles/app';
@@ -300,6 +301,10 @@ export type ApiHandlers = {
   'api/schedule-delete': (id: string) => Promise<void>;
 
   'api/schedules-get': () => Promise<APIScheduleEntity[]>;
+  'api/schedules-export': () => Promise<string>;
+  'api/schedules-import': (arg: {
+    content: string;
+  }) => Promise<APIScheduleImportResult>;
   'api/get-id-by-name': (arg: {
     type: string;
     name: string;

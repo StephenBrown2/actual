@@ -85,9 +85,13 @@ import { TransferOwnership } from './modals/TransferOwnership';
 import { UnmigrateBudgetAutomationsModal } from './modals/UnmigrateBudgetAutomationsModal';
 import { CategoryLearning } from './payees/CategoryLearning';
 import { DiscoverSchedules } from './schedules/DiscoverSchedules';
+import { ExportSchedulesJsonModal } from './schedules/ExportSchedulesJsonModal';
+import { ImportSchedulesJsonModal } from './schedules/ImportSchedulesJsonModal';
+import { ImportWallosModal } from './schedules/ImportWallosModal';
 import { PostsOfflineNotification } from './schedules/PostsOfflineNotification';
 import { ScheduleEditModal } from './schedules/ScheduleEditModal';
 import { ScheduleLink } from './schedules/ScheduleLink';
+import { SchedulesImportExportModal } from './schedules/SchedulesImportExportModal';
 import { UpcomingLength } from './schedules/UpcomingLength';
 
 export function Modals() {
@@ -269,6 +273,18 @@ export function Modals() {
 
         case 'schedules-discover':
           return <DiscoverSchedules key={key} />;
+
+        case 'import-wallos':
+          return <ImportWallosModal key={key} />;
+
+        case 'schedules-import-export':
+          return <SchedulesImportExportModal key={key} />;
+
+        case 'export-schedules-json':
+          return <ExportSchedulesJsonModal key={key} />;
+
+        case 'import-schedules-json':
+          return <ImportSchedulesJsonModal key={key} />;
 
         case 'schedules-upcoming-length':
           return <UpcomingLength key={key} />;

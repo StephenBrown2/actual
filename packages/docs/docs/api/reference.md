@@ -83,7 +83,9 @@ import APIList from './APIList';
 "getSchedules",
 "createSchedule",
 "updateSchedule",
-"deleteSchedule"
+"deleteSchedule",
+"exportSchedules",
+"importSchedules"
 ]} />
 
 <APIList title="Notes" sections={[
@@ -786,6 +788,28 @@ Returns the note for the given entity ID, or `null` if no note has been set.
 <Method name="updateNote" args={[{ name: 'id', type: 'id' }, { name: 'note', type: 'string' }]} returns="Promise<void>" />
 
 Sets the note on the entity with the given ID. Pass an empty string to clear the note.
+
+#### `exportSchedules`
+
+<Method name="exportSchedules" args={[]} returns="Promise<string>" />
+
+Exports schedules to a JSON document string.
+
+The exported payload includes schedules and their linked rule conditions/actions with references mapped by name where possible (for example account, payee, and category references).
+
+#### `importSchedules`
+
+<Method name="importSchedules" args={[{ name: 'content', type: 'string' }]} returns="Promise<{ imported: number; skipped: number; errors: { scheduleName: string | null; message: string }[] }>" />
+
+Imports schedules from a JSON document string produced by [`exportSchedules`](#exportschedules).
+
+Behavior:
+
+- Matches account, payee, and category references by name.
+- Category references are exported with category group metadata and imported using `(category name + group name)` when available, which disambiguates duplicate category names across groups.
+- Automatically creates missing payees by name.
+- Skips schedules that cannot be imported (for example, missing accounts/categories, duplicate schedule names, or unresolved/ambiguous category mappings) and reports per-schedule errors.
+- Preserves rule actions, and always re-links schedules using the newly created schedule id.
 
 ## Misc
 
