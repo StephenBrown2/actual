@@ -728,8 +728,26 @@ export class CategoryTemplateContext {
     template: AverageTemplate,
     templateContext: CategoryTemplateContext,
   ): Promise<number> {
+    // Reduce the lookback window until its oldest month has any spending.
+    let numMonths = template.numMonths;
+    while (numMonths > 0) {
+      const checkSheet = monthUtils.sheetForMonth(
+        monthUtils.subMonths(templateContext.month, numMonths),
+      );
+      // If we want category-specific spending instead, use:
+      // const categorySpent = await getSheetValue(
+      //   checkSheet,
+      //   `sum-amount-${templateContext.category.id}`,
+      // );
+      const totalSpent = await getSheetValue(checkSheet, 'total-spent');
+      if (totalSpent !== 0) {
+        break;
+      }
+      numMonths -= 1;
+    }
+
     let sum = 0;
-    for (let i = 1; i <= template.numMonths; i++) {
+    for (let i = 1; i <= numMonths; i++) {
       const sheetName = monthUtils.sheetForMonth(
         monthUtils.subMonths(templateContext.month, i),
       );
@@ -740,7 +758,7 @@ export class CategoryTemplateContext {
     }
 
     // negate as sheet value is cost ie negative
-    let average = -(sum / template.numMonths);
+    let average = numMonths === 0 ? 0 : -(sum / numMonths);
 
     if (template.adjustment !== undefined && template.adjustmentType) {
       switch (template.adjustmentType) {
