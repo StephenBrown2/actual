@@ -2,12 +2,13 @@ import { type Request, type Response } from 'express';
 import ipaddr from 'ipaddr.js';
 
 import { getSession } from '../account-db';
+import { refreshOpenIdSession } from '../accounts/openid';
 import { config } from '../load-config';
 
 export const TOKEN_EXPIRATION_NEVER = -1;
 const MS_PER_SECOND = 1000;
 
-export function validateSession(req: Request, res: Response) {
+export async function validateSession(req: Request, res: Response) {
   let { token } = req.body || {};
 
   if (!token) {
@@ -30,6 +31,14 @@ export function validateSession(req: Request, res: Response) {
     session.expires_at !== TOKEN_EXPIRATION_NEVER &&
     session.expires_at * MS_PER_SECOND <= Date.now()
   ) {
+    if (session.auth_method === 'openid' && session.refresh_token) {
+      const { session: refreshedSession } =
+        (await refreshOpenIdSession(session)) || {};
+      if (refreshedSession) {
+        return refreshedSession;
+      }
+    }
+
     res.status(401);
     res.send({
       status: 'error',

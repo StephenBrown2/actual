@@ -10,6 +10,17 @@ If you require a more robust authentication method than a server password, it is
 
 To enable this feature, you can use a [configuration file](/docs/config/) `config.json` on the Actual server, or use the UI.
 
+### Requested scopes
+
+When using the OpenID (OIDC) flow, Actual requests these scopes:
+
+- `openid` (required by OIDC)
+- `email` (used to find or create a user)
+- `profile` (used for display name when available)
+- `offline_access` (enables refresh tokens for longer-lived sessions)
+
+The `offline_access` scope is common for OpenID providers and allows Actual to refresh access tokens without prompting you to log in again. If your provider does not issue refresh tokens, Actual will fall back to the existing short-lived session behavior.
+
 ### Configuration Using a Configuration File
 
 If your OpenID provider supports discovery, use the following configuration example:

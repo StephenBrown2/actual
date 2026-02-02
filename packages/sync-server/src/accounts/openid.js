@@ -15,6 +15,19 @@ import { TOKEN_EXPIRATION_NEVER } from '../util/validate-user';
 
 import { checkPassword } from './password';
 
+function getSessionExpiration(tokenSet) {
+  if (config.get('token_expiration') === 'openid-provider') {
+    return tokenSet.expires_at ?? TOKEN_EXPIRATION_NEVER;
+  }
+  if (config.get('token_expiration') === 'never') {
+    return TOKEN_EXPIRATION_NEVER;
+  }
+  if (typeof config.get('token_expiration') === 'number') {
+    return Math.floor(Date.now() / 1000) + config.get('token_expiration');
+  }
+  return Math.floor(Date.now() / 1000) + 10 * 60; // Default to 10 minutes
+}
+
 export async function bootstrapOpenId(configParameter) {
   if (!('issuer' in configParameter) && !('discoveryURL' in configParameter)) {
     return { error: 'missing-issuer-or-discoveryURL' };
@@ -155,9 +168,13 @@ export async function loginWithOpenIdSetup(
     [state, code_verifier, returnUrl, expiry_time],
   );
 
+  const baseScope = 'openid email profile';
+  const scope =
+    config.authMethod === 'oauth2' ? baseScope : `${baseScope} offline_access`;
+
   const url = client.authorizationUrl({
     response_type: 'code',
-    scope: 'openid email profile',
+    scope,
     state,
     code_challenge,
     code_challenge_method: 'S256',
@@ -305,21 +322,11 @@ export async function loginWithOpenIdFinalize(body) {
 
     const token = uuidv4();
 
-    let expiration;
-    if (config.get('token_expiration') === 'openid-provider') {
-      expiration = tokenSet.expires_at ?? TOKEN_EXPIRATION_NEVER;
-    } else if (config.get('token_expiration') === 'never') {
-      expiration = TOKEN_EXPIRATION_NEVER;
-    } else if (typeof config.get('token_expiration') === 'number') {
-      expiration =
-        Math.floor(Date.now() / 1000) + config.get('token_expiration');
-    } else {
-      expiration = Math.floor(Date.now() / 1000) + 10 * 60; // Default to 10 minutes
-    }
+    const expiration = getSessionExpiration(tokenSet);
 
     accountDb.mutate(
-      'INSERT INTO sessions (token, expires_at, user_id, auth_method) VALUES (?, ?, ?, ?)',
-      [token, expiration, userId, 'openid'],
+      'INSERT INTO sessions (token, expires_at, user_id, auth_method, refresh_token) VALUES (?, ?, ?, ?, ?)',
+      [token, expiration, userId, 'openid', tokenSet.refresh_token ?? null],
     );
 
     clearExpiredSessions();
@@ -328,6 +335,65 @@ export async function loginWithOpenIdFinalize(body) {
   } catch (err) {
     console.error('OpenID grant failed:', err);
     return { error: 'openid-grant-failed' };
+  }
+}
+
+export async function refreshOpenIdSession(session) {
+  if (!session?.refresh_token) {
+    return { error: 'missing-refresh-token' };
+  }
+
+  const accountDb = getAccountDb();
+  let configFromDb = accountDb.first(
+    "SELECT extra_data FROM auth WHERE method = 'openid' AND active = 1",
+  );
+  if (!configFromDb) {
+    return { error: 'openid-not-configured' };
+  }
+  try {
+    configFromDb = JSON.parse(configFromDb['extra_data']);
+  } catch (err) {
+    console.error('Error parsing OpenID configuration:', err);
+    return { error: 'openid-setup-failed' };
+  }
+
+  let client;
+  try {
+    client = await setupOpenIdClient(configFromDb);
+  } catch (err) {
+    console.error('Error setting up OpenID client:', err);
+    return { error: 'openid-setup-failed' };
+  }
+
+  try {
+    let tokenSet;
+    if (!configFromDb.authMethod || configFromDb.authMethod === 'openid') {
+      tokenSet = await client.refresh(session.refresh_token);
+    } else {
+      tokenSet = await client.grant({
+        grant_type: 'refresh_token',
+        refresh_token: session.refresh_token,
+      });
+    }
+
+    const expiration = getSessionExpiration(tokenSet);
+    const refreshToken = tokenSet.refresh_token ?? session.refresh_token;
+
+    accountDb.mutate(
+      'UPDATE sessions SET expires_at = ?, refresh_token = ? WHERE token = ?',
+      [expiration, refreshToken, session.token],
+    );
+
+    return {
+      session: {
+        ...session,
+        expires_at: expiration,
+        refresh_token: refreshToken,
+      },
+    };
+  } catch (err) {
+    console.error('OpenID refresh failed:', err);
+    return { error: 'openid-refresh-failed' };
   }
 }
 
