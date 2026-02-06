@@ -16,91 +16,383 @@ jobs:
       issues: write
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - name: Set up environment
-        uses: ./.github/actions/setup
+      - name: Check CodeRabbit comment and PR context
+        id: pr-context
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
-          download-translations: 'false'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issueNumber = context.payload.issue?.number;
+            const comment = context.payload.comment;
+            const commentId = String(comment?.id ?? '');
 
-      - name: Check if this is CodeRabbit's first comment
-        id: check-first-comment
-        run: node .github/actions/ai-generated-release-notes/check-first-comment.js
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_EVENT_ISSUE_NUMBER: ${{ github.event.issue.number }}
-          GITHUB_EVENT_COMMENT_ID: ${{ github.event.comment.id }}
+            if (!issueNumber || !comment || !commentId) {
+              core.setOutput('should_run', 'false');
+              return;
+            }
 
-      - name: Get PR details
-        if: steps.check-first-comment.outputs.result == 'true'
-        id: pr-details
-        run: node .github/actions/ai-generated-release-notes/pr-details.js
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_EVENT_ISSUE_NUMBER: ${{ github.event.issue.number }}
+            const summaryMarker =
+              '<!-- This is an auto-generated comment: summarize by coderabbit.ai -->';
 
-      - name: Check if PR targets master branch
-        if: steps.check-first-comment.outputs.result == 'true' && steps.pr-details.outputs.result != 'null'
-        id: check-base-branch
-        run: |
-          BASE_BRANCH=$(echo '${{ steps.pr-details.outputs.result }}' | jq -r '.baseBranch')
-          echo "Base branch: $BASE_BRANCH"
-          if [ "$BASE_BRANCH" = "master" ]; then
-            echo "targets_master=true" >> $GITHUB_OUTPUT
-          else
-            echo "targets_master=false" >> $GITHUB_OUTPUT
-            echo "PR does not target master branch, skipping release notes generation"
-          fi
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+            });
 
-      - name: Check if release notes file already exists
-        if: steps.check-first-comment.outputs.result == 'true' && steps.pr-details.outputs.result != 'null' && steps.check-base-branch.outputs.targets_master == 'true'
-        id: check-release-notes-exists
-        run: node .github/actions/ai-generated-release-notes/check-release-notes-exists.js
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_EVENT_ISSUE_NUMBER: ${{ github.event.issue.number }}
-          PR_DETAILS: ${{ steps.pr-details.outputs.result }}
+            const coderabbitSummaryComments = comments.filter(existingComment => {
+              const isCodeRabbit = existingComment.user?.login === 'coderabbitai[bot]';
+              const hasSummaryMarker = existingComment.body?.includes(summaryMarker);
+              return isCodeRabbit && hasSummaryMarker;
+            });
+
+            const isFirstSummaryComment =
+              coderabbitSummaryComments.length === 1 &&
+              String(coderabbitSummaryComments[0].id) === commentId;
+
+            if (!isFirstSummaryComment) {
+              core.setOutput('should_run', 'false');
+              return;
+            }
+
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: issueNumber,
+            });
+
+            if (pr.base.ref !== 'master') {
+              core.setOutput('should_run', 'false');
+              return;
+            }
+
+            const prDetails = {
+              number: pr.number,
+              author: pr.user.login,
+              title: pr.title,
+              baseBranch: pr.base.ref,
+            };
+
+            const fileName = `upcoming-release-notes/${pr.number}.md`;
+            let fileExists = false;
+            try {
+              await github.rest.repos.getContent({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                path: fileName,
+                ref: pr.head.sha,
+              });
+              fileExists = true;
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+            }
+
+            core.setOutput('should_run', 'true');
+            core.setOutput('file_exists', String(fileExists));
+            core.setOutput('pr_details', JSON.stringify(prDetails));
 
       - name: Generate summary with OpenAI
-        if: steps.check-first-comment.outputs.result == 'true' && steps.check-release-notes-exists.outputs.result == 'false'
+        if: steps.pr-context.outputs.should_run == 'true' && steps.pr-context.outputs.file_exists == 'false'
         id: generate-summary
-        run: node .github/actions/ai-generated-release-notes/generate-summary.js
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GITHUB_EVENT_COMMENT_BODY: ${{ github.event.comment.body }}
-          PR_DETAILS: ${{ steps.pr-details.outputs.result }}
+          PR_DETAILS: ${{ steps.pr-context.outputs.pr_details }}
+        with:
+          script: |
+            const openaiApiKey = process.env.OPENAI_API_KEY;
+            const prDetailsJson = process.env.PR_DETAILS;
+            const commentBody = context.payload.comment?.body ?? '';
+
+            if (!openaiApiKey || !prDetailsJson) {
+              core.setOutput('summary_data', 'null');
+              return;
+            }
+
+            const prDetails = JSON.parse(prDetailsJson);
+            if (!prDetails) {
+              core.setOutput('summary_data', 'null');
+              return;
+            }
+
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${openaiApiKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: 'gpt-4o-mini',
+                messages: [
+                  {
+                    role: 'system',
+                    content:
+                      'You are a technical writer helping to create concise release notes. Generate a maximum 15-word summary that describes what this PR does. Focus on the user-facing changes or bug fixes. Do not include "This PR" or similar phrases - just describe the change directly. Start with a base form verb (e.g., "Add" not "Adds", "Fix" not "Fixes", "Introduce" not "Introduces").',
+                  },
+                  {
+                    role: 'user',
+                    content: `PR Title: ${prDetails.title}\n\nCodeRabbit Analysis:\n${commentBody}\n\nPlease provide a concise summary (max 15 words) of what this PR accomplishes.`,
+                  },
+                ],
+                max_tokens: 50,
+                temperature: 0.3,
+              }),
+            });
+
+            if (!response.ok) {
+              core.setOutput('summary_data', 'null');
+              return;
+            }
+
+            const data = await response.json();
+            const summary = String(data.choices?.[0]?.message?.content ?? '')
+              .replace(/\s+/g, ' ')
+              .trim();
+
+            if (!summary) {
+              core.setOutput('summary_data', 'null');
+              return;
+            }
+
+            const summaryData = {
+              summary,
+              prNumber: prDetails.number,
+              author: prDetails.author,
+            };
+
+            core.setOutput('summary_data', JSON.stringify(summaryData));
 
       - name: Determine category with OpenAI
-        if: steps.check-first-comment.outputs.result == 'true' && steps.check-release-notes-exists.outputs.result == 'false' && steps.generate-summary.outputs.result != 'null'
+        if: steps.generate-summary.outputs.summary_data != 'null'
         id: determine-category
-        run: node .github/actions/ai-generated-release-notes/determine-category.js
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GITHUB_EVENT_COMMENT_BODY: ${{ github.event.comment.body }}
-          PR_DETAILS: ${{ steps.pr-details.outputs.result }}
-          SUMMARY_DATA: ${{ steps.generate-summary.outputs.result }}
+          PR_DETAILS: ${{ steps.pr-context.outputs.pr_details }}
+          SUMMARY_DATA: ${{ steps.generate-summary.outputs.summary_data }}
+        with:
+          script: |
+            const openaiApiKey = process.env.OPENAI_API_KEY;
+            const prDetailsJson = process.env.PR_DETAILS;
+            const summaryDataJson = process.env.SUMMARY_DATA;
+            const commentBody = context.payload.comment?.body ?? '';
+
+            if (!openaiApiKey || !prDetailsJson || !summaryDataJson) {
+              core.setOutput('category', 'null');
+              return;
+            }
+
+            const prDetails = JSON.parse(prDetailsJson);
+            const summaryData = JSON.parse(summaryDataJson);
+
+            if (!prDetails || !summaryData) {
+              core.setOutput('category', 'null');
+              return;
+            }
+
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${openaiApiKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: 'gpt-4o-mini',
+                messages: [
+                  {
+                    role: 'system',
+                    content:
+                      'You are categorizing pull requests for release notes. You must respond with exactly one of these categories: "Features", "Enhancements", "Bugfixes", or "Maintenance". No other text or explanation.',
+                  },
+                  {
+                    role: 'user',
+                    content: `PR Title: ${prDetails.title}\n\nGenerated Summary: ${summaryData.summary}\n\nCodeRabbit Analysis:\n${commentBody}\n\nCategories:\n- Features: New functionality or capabilities\n- Bugfixes: Fixes for broken or incorrect behavior\n- Enhancements: Improvements to existing functionality\n- Maintenance: Code cleanup, refactoring, dependencies, etc.\n\nWhat category does this PR belong to?`,
+                  },
+                ],
+                max_tokens: 10,
+                temperature: 0.1,
+              }),
+            });
+
+            if (!response.ok) {
+              core.setOutput('category', 'null');
+              return;
+            }
+
+            const data = await response.json();
+            const rawCategory = String(data.choices?.[0]?.message?.content ?? '')
+              .replace(/^["']|["']$/g, '')
+              .trim();
+
+            const validCategories = new Set([
+              'Features',
+              'Bugfixes',
+              'Enhancements',
+              'Maintenance',
+            ]);
+
+            if (!validCategories.has(rawCategory)) {
+              core.setOutput('category', 'null');
+              return;
+            }
+
+            core.setOutput('category', rawCategory);
 
       - name: Create and commit release notes file via GitHub API
-        if: steps.check-first-comment.outputs.result == 'true' && steps.check-release-notes-exists.outputs.result == 'false' && steps.generate-summary.outputs.result != 'null' && steps.determine-category.outputs.result != 'null' && steps.determine-category.outputs.result != ''
+        if: steps.determine-category.outputs.category != 'null' && steps.determine-category.outputs.category != ''
         id: create-file
-        run: node .github/actions/ai-generated-release-notes/create-release-notes-file.js
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
-          GITHUB_TOKEN: ${{ secrets.ACTIONS_UPDATE_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_EVENT_ISSUE_NUMBER: ${{ github.event.issue.number }}
-          SUMMARY_DATA: ${{ steps.generate-summary.outputs.result }}
-          CATEGORY: ${{ steps.determine-category.outputs.result }}
+          SUMMARY_DATA: ${{ steps.generate-summary.outputs.summary_data }}
+          CATEGORY: ${{ steps.determine-category.outputs.category }}
+        with:
+          github-token: ${{ secrets.ACTIONS_UPDATE_TOKEN }}
+          script: |
+            const summaryDataJson = process.env.SUMMARY_DATA;
+            const category = process.env.CATEGORY;
+            const issueNumber = context.payload.issue?.number;
+
+            if (!summaryDataJson || !category || !issueNumber) {
+              core.setOutput('status', 'skipped');
+              return;
+            }
+
+            const summaryData = JSON.parse(summaryDataJson);
+            if (!summaryData) {
+              core.setOutput('status', 'skipped');
+              return;
+            }
+
+            const cleanCategory = String(category).replace(/^["']|["']$/g, '');
+            const fileContent = `---\ncategory: ${cleanCategory}\nauthors: [${summaryData.author}]\n---\n\n${summaryData.summary}`;
+            const fileName = `upcoming-release-notes/${summaryData.prNumber}.md`;
+
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: issueNumber,
+            });
+
+            if (!pr.head.repo) {
+              core.setOutput('status', 'repo_deleted');
+              return;
+            }
+
+            const prBranch = pr.head.ref;
+            const headOwner = pr.head.repo.owner.login;
+            const headRepo = pr.head.repo.name;
+
+            try {
+              await github.rest.repos.createOrUpdateFileContents({
+                owner: headOwner,
+                repo: headRepo,
+                path: fileName,
+                message: `Add release notes for PR #${summaryData.prNumber}`,
+                content: Buffer.from(fileContent).toString('base64'),
+                branch: prBranch,
+                committer: {
+                  name: 'github-actions[bot]',
+                  email: 'github-actions[bot]@users.noreply.github.com',
+                },
+                author: {
+                  name: 'github-actions[bot]',
+                  email: 'github-actions[bot]@users.noreply.github.com',
+                },
+              });
+
+              core.setOutput('status', 'created');
+            } catch (error) {
+              if (error.status === 403 || error.status === 404) {
+                core.setOutput('status', 'manual_required');
+                return;
+              }
+              throw error;
+            }
 
       - name: Comment on PR
-        if: steps.check-first-comment.outputs.result == 'true' && steps.check-release-notes-exists.outputs.result == 'false' && steps.generate-summary.outputs.result != 'null' && steps.determine-category.outputs.result != 'null' && steps.determine-category.outputs.result != ''
-        run: node .github/actions/ai-generated-release-notes/comment-on-pr.js
+        if: steps.determine-category.outputs.category != 'null' && steps.determine-category.outputs.category != ''
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_EVENT_ISSUE_NUMBER: ${{ github.event.issue.number }}
-          SUMMARY_DATA: ${{ steps.generate-summary.outputs.result }}
-          CATEGORY: ${{ steps.determine-category.outputs.result }}
+          SUMMARY_DATA: ${{ steps.generate-summary.outputs.summary_data }}
+          CATEGORY: ${{ steps.determine-category.outputs.category }}
           FILE_CREATION_STATUS: ${{ steps.create-file.outputs.status }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const summaryDataJson = process.env.SUMMARY_DATA;
+            const category = process.env.CATEGORY;
+            const fileCreationStatus = process.env.FILE_CREATION_STATUS;
+            const issueNumber = context.payload.issue?.number;
+
+            if (!summaryDataJson || !category || !issueNumber) {
+              return;
+            }
+
+            const summaryData = JSON.parse(summaryDataJson);
+            if (!summaryData) {
+              return;
+            }
+
+            const cleanCategory = String(category).replace(/^["']|["']$/g, '');
+            const fileContent = `---\ncategory: ${cleanCategory}\nauthors: [${summaryData.author}]\n---\n\n${summaryData.summary}`;
+            const fileName = `upcoming-release-notes/${summaryData.prNumber}.md`;
+
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: issueNumber,
+            });
+
+            const headOwner = pr.head.repo?.owner.login || summaryData.author;
+            const headRepo = pr.head.repo?.name || context.repo.repo;
+            const prBranch = pr.head.ref;
+            const fileUrl = pr.head.repo
+              ? `https://github.com/${headOwner}/${headRepo}/blob/${prBranch}/${fileName}`
+              : null;
+
+            let commentBody = ['🤖 **Auto-generated Release Notes**', ''];
+
+            if (fileCreationStatus === 'created') {
+              commentBody = commentBody.concat([
+                `Hey @${summaryData.author}! I've automatically created a release notes file based on CodeRabbit's analysis:`,
+                '',
+                `**Category:** ${cleanCategory}`,
+                `**Summary:** ${summaryData.summary}`,
+                `**File:** [${fileName}](${fileUrl})`,
+                '',
+                'The release notes file has been committed to your branch. You can edit it if needed before merging.',
+              ]);
+            } else if (fileCreationStatus === 'repo_deleted') {
+              commentBody = commentBody.concat([
+                `Hey @${summaryData.author}! I've generated release notes based on CodeRabbit's analysis.`,
+                '',
+                `Since the source repository has been deleted, I couldn't automatically commit the file. Please create \`${fileName}\` in the base repository with the following content:`,
+                '',
+                '```markdown',
+                fileContent,
+                '```',
+                '',
+                'You can edit the summary if needed before committing.',
+              ]);
+            } else {
+              commentBody = commentBody.concat([
+                `Hey @${summaryData.author}! I've generated release notes based on CodeRabbit's analysis.`,
+                '',
+                `I couldn't automatically commit the file to your branch. Please create \`${fileName}\` with the following content:`,
+                '',
+                '```markdown',
+                fileContent,
+                '```',
+                '',
+                'You can edit the summary if needed before committing.',
+              ]);
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body: commentBody.join('\n'),
+            });

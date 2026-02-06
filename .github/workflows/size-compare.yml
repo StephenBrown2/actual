@@ -142,12 +142,127 @@ jobs:
             --identifier combined \
             --format pr-body > bundle-stats-comment.md
       - name: Post combined bundle stats comment
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          node packages/ci-actions/bin/update-bundle-stats-comment.mjs \
-            --comment-file bundle-stats-comment.md \
-            --identifier combined \
-            --target pr-body
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { readFile } = require('node:fs/promises');
+            const path = require('node:path');
+
+            const BOT_BOUNDARY_MARKER = '<!--- actual-bot-sections --->';
+            const BOT_BOUNDARY_TEXT = `${BOT_BOUNDARY_MARKER}\n<hr />`;
+            const identifier = 'combined';
+            const target = 'pr-body';
+            const issueNumber = context.payload.pull_request?.number;
+
+            if (!issueNumber) {
+              throw new Error('Missing pull request number in workflow context.');
+            }
+
+            const commentFile = path.resolve(
+              process.cwd(),
+              'bundle-stats-comment.md',
+            );
+            const commentBody = await readFile(commentFile, 'utf8');
+
+            function escapeRegExp(value) {
+              return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            }
+
+            function getIdentifierMarkers(key) {
+              if (key.includes('<!---')) {
+                return { start: key, end: null };
+              }
+
+              const label = 'bundlestats-action-comment';
+              return {
+                start: `<!--- ${label} key:${key} start --->`,
+                end: `<!--- ${label} key:${key} end --->`,
+              };
+            }
+
+            function upsertBlock(existingBody, block, markers) {
+              const body = existingBody ?? '';
+
+              if (markers.end) {
+                const pattern = new RegExp(
+                  `${escapeRegExp(markers.start)}[\\s\\S]*?${escapeRegExp(markers.end)}`,
+                  'm',
+                );
+
+                if (pattern.test(body)) {
+                  return body.replace(pattern, block.trim());
+                }
+              }
+
+              if (body.trim().length === 0) {
+                return block.trim();
+              }
+
+              const separator = body.endsWith('\n') ? '\n' : '\n\n';
+              const boundary = body.includes(BOT_BOUNDARY_MARKER)
+                ? ''
+                : `${BOT_BOUNDARY_TEXT}\n\n`;
+              return `${body}${separator}${boundary}${block.trim()}`;
+            }
+
+            async function listComments(owner, repo) {
+              return github.paginate(github.rest.issues.listComments, {
+                owner,
+                repo,
+                issue_number: issueNumber,
+                per_page: 100,
+              });
+            }
+
+            function isGitHubActionsBot(comment) {
+              return comment.user?.login === 'github-actions[bot]';
+            }
+
+            async function updatePullRequestBody(
+              owner,
+              repo,
+              block,
+              markers,
+            ) {
+              const { data } = await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: issueNumber,
+              });
+              const nextBody = upsertBlock(data.body ?? '', block, markers);
+
+              await github.rest.pulls.update({
+                owner,
+                repo,
+                pull_number: issueNumber,
+                body: nextBody,
+              });
+            }
+
+            async function deleteExistingComment(owner, repo, markers) {
+              const comments = await listComments(owner, repo);
+              const existingComment = comments.find(
+                comment =>
+                  isGitHubActionsBot(comment) &&
+                  comment.body?.includes(markers.start),
+              );
+
+              if (existingComment) {
+                await github.rest.issues.deleteComment({
+                  owner,
+                  repo,
+                  comment_id: existingComment.id,
+                });
+              }
+            }
+
+            const markers = getIdentifierMarkers(identifier);
+
+            await updatePullRequestBody(
+              context.repo.owner,
+              context.repo.repo,
+              commentBody,
+              markers,
+            );
+            await deleteExistingComment(context.repo.owner, context.repo.repo, markers);
