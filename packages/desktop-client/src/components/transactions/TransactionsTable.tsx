@@ -90,6 +90,8 @@ import { getAccountsById } from '@desktop-client/accounts/accountsSlice';
 import { AccountAutocomplete } from '@desktop-client/components/autocomplete/AccountAutocomplete';
 import { CategoryAutocomplete } from '@desktop-client/components/autocomplete/CategoryAutocomplete';
 import { PayeeAutocomplete } from '@desktop-client/components/autocomplete/PayeeAutocomplete';
+import { makeAmountFullStyle } from '@desktop-client/components/budget/util';
+import { FinancialText } from '@desktop-client/components/FinancialText';
 import {
   getStatusProps,
   type StatusTypes,
@@ -129,15 +131,21 @@ import {
   useSelectedItems,
 } from '@desktop-client/hooks/useSelected';
 import { SheetNameProvider } from '@desktop-client/hooks/useSheetName';
+import { useSheetValue } from '@desktop-client/hooks/useSheetValue';
 import {
   useSplitsExpanded,
   type SplitsExpandedContextValue,
 } from '@desktop-client/hooks/useSplitsExpanded';
+import { useSyncedPref } from '@desktop-client/hooks/useSyncedPref';
 import { pushModal } from '@desktop-client/modals/modalsSlice';
 import { NotesTagFormatter } from '@desktop-client/notes/NotesTagFormatter';
 import { addNotification } from '@desktop-client/notifications/notificationsSlice';
 import { getPayeesById } from '@desktop-client/payees/payeesSlice';
 import { useDispatch } from '@desktop-client/redux';
+import {
+  envelopeBudget,
+  trackingBudget,
+} from '@desktop-client/spreadsheet/bindings';
 
 type TransactionHeaderProps = {
   hasSelected: boolean;
@@ -826,6 +834,132 @@ function PayeeIcons({
   );
 }
 
+type CategoryInfoTooltipProps = {
+  categoryId: CategoryEntity['id'];
+  categoryGroups: CategoryGroupEntity[];
+  monthLabel: string;
+  children: ReactNode;
+};
+
+function CategoryInfoTooltip({
+  categoryId,
+  categoryGroups,
+  monthLabel,
+  children,
+}: CategoryInfoTooltipProps) {
+  const { t } = useTranslation();
+  const [budgetType = 'envelope'] = useSyncedPref('budgetType');
+
+  const categoriesById = getCategoriesById(categoryGroups);
+  const categoryGroupsById = getCategoryGroupsById(categoryGroups);
+  const category = categoriesById[categoryId]!;
+  const groupName = categoryGroupsById[category.group]!.name;
+  const isIncomeCategory = category.is_income;
+
+  const budgetedBinding =
+    budgetType === 'envelope'
+      ? envelopeBudget.catBudgeted(categoryId)
+      : trackingBudget.catBudgeted(categoryId);
+  const spentBinding =
+    budgetType === 'envelope'
+      ? envelopeBudget.catSumAmount(categoryId)
+      : trackingBudget.catSumAmount(categoryId);
+  const availableBinding =
+    budgetType === 'envelope'
+      ? envelopeBudget.catBalance(categoryId)
+      : trackingBudget.catBalance(categoryId);
+  const receivedBinding =
+    budgetType === 'envelope'
+      ? envelopeBudget.catSumAmount(categoryId)
+      : trackingBudget.catSumAmount(categoryId);
+
+  const budgeted = useSheetValue<
+    'envelope-budget' | 'tracking-budget',
+    typeof budgetedBinding
+  >(budgetedBinding);
+  const spent = useSheetValue<
+    'envelope-budget' | 'tracking-budget',
+    typeof spentBinding
+  >(spentBinding);
+  const available = useSheetValue<
+    'envelope-budget' | 'tracking-budget',
+    typeof availableBinding
+  >(availableBinding);
+  const received = useSheetValue<
+    'envelope-budget' | 'tracking-budget',
+    typeof receivedBinding
+  >(receivedBinding);
+
+  const rowStyle = {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  } as CSSProperties;
+
+  return (
+    <Tooltip
+      content={
+        <View style={{ padding: 10, minWidth: 220 }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <Text style={{ fontWeight: 600 }}>{t(groupName)}</Text>
+            <Text style={{ color: theme.pageTextSubdued }}>{monthLabel}</Text>
+          </View>
+          <View style={{ marginTop: 8, gap: 4 }}>
+            {isIncomeCategory ? (
+              <View style={rowStyle}>
+                <Text style={{ color: theme.pageTextSubdued }}>
+                  <Trans>Received</Trans>
+                </Text>
+                <FinancialText style={makeAmountFullStyle(received ?? 0)}>
+                  {integerToCurrency(received ?? 0)}
+                </FinancialText>
+              </View>
+            ) : (
+              <>
+                <View style={rowStyle}>
+                  <Text style={{ color: theme.pageTextSubdued }}>
+                    <Trans>Budgeted</Trans>
+                  </Text>
+                  <FinancialText style={makeAmountFullStyle(budgeted ?? 0)}>
+                    {integerToCurrency(budgeted ?? 0)}
+                  </FinancialText>
+                </View>
+                <View style={rowStyle}>
+                  <Text style={{ color: theme.pageTextSubdued }}>
+                    <Trans>Spent</Trans>
+                  </Text>
+                  <FinancialText style={makeAmountFullStyle(spent ?? 0)}>
+                    {integerToCurrency(spent ?? 0)}
+                  </FinancialText>
+                </View>
+                <View style={rowStyle}>
+                  <Text style={{ color: theme.pageTextSubdued }}>
+                    <Trans>Available</Trans>
+                  </Text>
+                  <FinancialText style={makeAmountFullStyle(available ?? 0)}>
+                    {integerToCurrency(available ?? 0)}
+                  </FinancialText>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      }
+      style={{ ...styles.tooltip, borderRadius: '0px 5px 5px 0px' }}
+      placement="bottom start"
+      triggerProps={{ delay: 750, closeDelay: 250 }}
+    >
+      {children}
+    </Tooltip>
+  );
+}
+
 type TransactionProps = {
   allTransactions?: TransactionEntity[];
   transaction: TransactionEntity;
@@ -1096,6 +1230,14 @@ const Transaction = memo(function Transaction({
     : null;
 
   const previewStatus = forceUpcoming ? 'upcoming' : categoryId;
+  const transactionMonth = transaction.date
+    ? monthUtils.monthFromDate(transaction.date)
+    : monthUtils.currentMonth();
+  const categoryBudgetSheetName = monthUtils.sheetForMonth(transactionMonth);
+  const categoryMonthLabel = formatDate(
+    parseISO(`${transactionMonth}-01`),
+    'MMM yyyy',
+  );
 
   // Join in some data
   const payee =
@@ -1550,6 +1692,21 @@ const Transaction = memo(function Transaction({
           }
           exposed={focusedField === 'category'}
           onExpose={name => !isPreview && onEdit(id, name)}
+          unexposedContent={props =>
+            categoryId ? (
+              <SheetNameProvider name={categoryBudgetSheetName}>
+                <CategoryInfoTooltip
+                  categoryId={categoryId}
+                  categoryGroups={categoryGroups}
+                  monthLabel={categoryMonthLabel}
+                >
+                  <UnexposedCellContent {...props} />
+                </CategoryInfoTooltip>
+              </SheetNameProvider>
+            ) : (
+              <UnexposedCellContent {...props} />
+            )
+          }
           valueStyle={
             !categoryId
               ? {
@@ -3046,6 +3203,17 @@ const getCategoriesById = memoizeOne(
       group.categories?.forEach(cat => {
         res[cat.id] = cat;
       });
+    });
+
+    return res;
+  },
+);
+
+const getCategoryGroupsById = memoizeOne(
+  (categoryGroups: CategoryGroupEntity[] | null | undefined) => {
+    const res: { [id: CategoryGroupEntity['id']]: CategoryGroupEntity } = {};
+    categoryGroups?.forEach(group => {
+      res[group.id] = group;
     });
 
     return res;
