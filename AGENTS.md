@@ -2,6 +2,16 @@
 
 This guide provides comprehensive information for AI agents (like Cursor) working with the Actual Budget codebase.
 
+## Canonical Documentation
+
+The contributing documentation at `packages/docs/docs/contributing/` is the **source of truth** for development guidelines. This AGENTS.md file is a summary optimized for AI agents. When in doubt, defer to the docs. Key references:
+
+- `packages/docs/docs/contributing/index.md` - Contributing overview
+- `packages/docs/docs/contributing/code-style.md` - Code style guide
+- `packages/docs/docs/contributing/testing.md` - Testing guide
+- `packages/docs/docs/contributing/i18n.md` - Internationalization
+- `packages/docs/docs/contributing/project-details/` - Architecture, database, migrations, feature flags, Electron
+
 ## Project Overview
 
 **Actual Budget** is a local-first personal finance tool written in TypeScript/JavaScript. It's 100% free and open-source with synchronization capabilities across devices.
@@ -263,6 +273,72 @@ Always run `yarn typecheck` before committing.
 
 - Wrap standalone financial numbers with `FinancialText` or apply `styles.tnum` directly if wrapping is not possible
 
+### 6. Feature Flags (Experimental Features)
+
+See `packages/docs/docs/contributing/project-details/feature-flags.md` for the full policy.
+
+- Feature flags allow releasing large features incrementally and gathering real-user feedback
+- **Experimental features with no active development for 3 months will be removed** from the codebase
+- Do **not** use feature flags as configuration toggles for small UI or functional quirks -- Actual's design philosophy favors a single supported behavior over per-user settings
+- The core team does not maintain abandoned experimental features but will support active contributors
+
+### 7. DB Migrations
+
+See `packages/docs/docs/contributing/project-details/migrations.md` for the full guide.
+
+- Place migration files in `loot-core/migrations/` with the naming convention: `TIMESTAMP_name.sql` (e.g., `1694438752000_add_goal_targets.sql`). Generate the millisecond-precision timestamp with `date +%s%3N`
+- **Never remove columns or tables** -- this makes reverting impossible and introduces unnecessary risk; simply stop using them in code
+- DB migrations require publishing a new API version
+- Update the AQL Schema file to match any table changes
+- Be deliberate: think about future scenarios to minimize the number of migrations needed
+
+### 8. Release Notes
+
+Before creating a pull request:
+
+1. Run `yarn generate:release-notes` -- this walks you through creating a release note
+2. The script creates a Markdown file in `upcoming-release-notes/` named after the PR number
+3. File format:
+
+   ```markdown
+   ---
+   category: Features
+   authors: [YourGitHubUsername]
+   ---
+
+   Add option to include exchange rate multiplier during import
+   ```
+
+4. Valid categories: `Features`, `Enhancements`, `Bugfix`, `Maintenance`
+5. Phrase the summary as a command (e.g., "Add..." not "Added..." or "Adds...")
+
+### 9. Design Philosophy
+
+Actual's UI should be **minimalistic and clutter-free**, exposing advanced features progressively as the user interacts with the product. For example, the notes button is hidden by default but becomes persistently visible once notes exist.
+
+- Do not add a button or setting for every small UI detail (sizes, paddings, margins, etc.)
+- The settings screen should remain a place for core settings only -- avoid a proliferation of niche options
+- This applies to feature flags too: do not use them as configuration toggles for minor behavior differences
+
+### 10. Database & Architecture
+
+See `packages/docs/docs/contributing/project-details/architecture.md` and `packages/docs/docs/contributing/project-details/database.md` for full details.
+
+- **Web app**: The background server runs in a [web worker](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers), keeping the UI responsive
+- **Electron app**: The background server runs as a Node.js child process communicating over WebSockets (see [PR #1003](https://github.com/actualbudget/actual/pull/1003))
+- **SQLite**: Data is stored locally; the DB is created from `loot-core/default-db.sqlite` and brought up to date via migrations in `loot-core/migrations/`
+- **Views**: Names prefixed with `v_` are views (recreated on each app start) that normalize data shape without altering underlying tables
+- Key database code lives in `loot-core/src/server/db`
+
+### 11. Electron & `global.Actual` Advice
+
+See `packages/docs/docs/contributing/project-details/electron.md` and `packages/docs/docs/contributing/project-details/advice.md`.
+
+- Most features/fixes do **not** require Electron-specific changes
+- Changes to the `global.Actual` object **must** happen inside the respective Electron and browser preload scripts -- direct reassignment works in the browser but is not supported in Electron
+- Due to Electron security, data passed between frontend and local backend is generally limited to strings/ints via `ipcRenderer`
+- Always **manually test** `global.Actual` changes on Electron builds in addition to the browser
+
 ## Code Style & Conventions
 
 ### TypeScript Guidelines
@@ -505,7 +581,7 @@ Icons in `packages/component-library/src/icons/` are auto-generated. Don't manua
 
 1. Clean build artifacts: `rm -rf packages/*/dist packages/*/lib-dist packages/*/build`
 2. Reinstall dependencies: `yarn install`
-3. Check Node.js version (requires >=20)
+3. Check Node.js version (requires >=22)
 4. Check Yarn version (requires ^4.9.1)
 
 ## Testing Patterns
@@ -586,7 +662,7 @@ yarn install:server
 
 ## Environment Requirements
 
-- **Node.js**: >=20
+- **Node.js**: >=22
 - **Yarn**: ^4.9.1 (managed by packageManager field)
 - **Browser Targets**: Electron >= 35.0, modern browsers (see browserslist)
 
