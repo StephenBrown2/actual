@@ -19267,6 +19267,7 @@ __metadata:
     handlebars: "npm:^4.7.8"
     i18next: "npm:^25.7.4"
     jest-diff: "npm:^30.2.0"
+    json5: "npm:^2.2.3"
     jsverify: "npm:^0.8.4"
     lru-cache: "npm:^11.2.4"
     md5: "npm:^2.3.0"

@@ -14,8 +14,10 @@ import type { ScheduleItemAction } from './SchedulesTable';
 
 import { Search } from '@desktop-client/components/common/Search';
 import { Page } from '@desktop-client/components/Page';
+import { useMetadataPref } from '@desktop-client/hooks/useMetadataPref';
 import { useSchedules } from '@desktop-client/hooks/useSchedules';
 import { pushModal } from '@desktop-client/modals/modalsSlice';
+import { addNotification } from '@desktop-client/notifications/notificationsSlice';
 import { useDispatch } from '@desktop-client/redux';
 
 export function Schedules() {
@@ -23,6 +25,39 @@ export function Schedules() {
 
   const dispatch = useDispatch();
   const [filter, setFilter] = useState('');
+  const [budgetName] = useMetadataPref('budgetName');
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const isBusy = isImporting || isExporting;
+
+  const notify = useCallback(
+    (type: 'error' | 'warning' | 'message', message: string) => {
+      dispatch(
+        addNotification({
+          notification: {
+            type,
+            message,
+          },
+        }),
+      );
+    },
+    [dispatch],
+  );
+
+  const notifyUnknownFailure = useCallback(
+    (operation: 'exporting' | 'importing') => {
+      const message =
+        operation === 'exporting'
+          ? t(
+              'An unknown error occurred while exporting schedules. Please report this as a new issue on GitHub.',
+            )
+          : t(
+              'An unknown error occurred while importing schedules. Please report this as a new issue on GitHub.',
+            );
+      notify('error', message);
+    },
+    [notify, t],
+  );
 
   const onEdit = useCallback(
     (id: ScheduleEntity['id']) => {
@@ -44,6 +79,70 @@ export function Schedules() {
   const onChangeUpcomingLength = useCallback(() => {
     dispatch(pushModal({ modal: { name: 'schedules-upcoming-length' } }));
   }, [dispatch]);
+
+  const onExportSchedules = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      const response = await send('export-schedules');
+      if ('error' in response && response.error) {
+        notifyUnknownFailure('exporting');
+        return;
+      }
+
+      if (response.data) {
+        const day = new Date().toISOString().slice(0, 10);
+        const fileName = `${day}-${budgetName || 'budget'}-schedules.json5`;
+        window.Actual.saveFile(response.data, fileName, t('Export schedules'));
+        notify('message', t('Schedules exported to "{{fileName}}".', { fileName }));
+      }
+    } finally {
+      setIsExporting(false);
+    }
+  }, [budgetName, notify, notifyUnknownFailure, t]);
+
+  const onImportSchedules = useCallback(async () => {
+    const filepaths = await window.Actual.openFileDialog({
+      properties: ['openFile'],
+      filters: [{ name: 'json5', extensions: ['json5', 'json'] }],
+    });
+    if (!filepaths || filepaths.length === 0) {
+      return;
+    }
+
+    setIsImporting(true);
+    try {
+      const response = await send('import-schedules', {
+        filepath: filepaths[0],
+      });
+      if ('error' in response && response.error) {
+        notifyUnknownFailure('importing');
+        return;
+      }
+
+      const firstError = response.errors?.[0];
+      const summary = t(
+        'Imported {{imported}} schedules, skipped {{skipped}}.',
+        {
+          imported: response.imported ?? 0,
+          skipped: response.skipped ?? 0,
+        },
+      );
+      if (firstError) {
+        notify(
+          'warning',
+          t('{{summary}} First error ({{scheduleName}}): {{message}}', {
+            summary,
+            scheduleName: firstError.scheduleName || t('unnamed schedule'),
+            message: firstError.message,
+          }),
+        );
+      } else {
+        notify('message', summary);
+      }
+    } finally {
+      setIsImporting(false);
+    }
+  }, [notify, notifyUnknownFailure, t]);
 
   const onAction = useCallback(
     async (name: ScheduleItemAction, id: ScheduleEntity['id']) => {
@@ -135,6 +234,18 @@ export function Schedules() {
             gap: '1em',
           }}
         >
+          <Button
+            onPress={onImportSchedules}
+            isDisabled={isBusy}
+          >
+            <Trans>Import schedules</Trans>
+          </Button>
+          <Button
+            onPress={onExportSchedules}
+            isDisabled={isBusy}
+          >
+            <Trans>Export schedules</Trans>
+          </Button>
           <Button onPress={onDiscover}>
             <Trans>Find schedules</Trans>
           </Button>

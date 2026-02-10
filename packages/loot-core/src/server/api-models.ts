@@ -192,6 +192,17 @@ export type APIScheduleEntity = Pick<
   date: ScheduleEntity['_date']; // mandatory field in creating a schedule Mandatory field in creation
 };
 
+export type APIScheduleImportError = {
+  scheduleName: string | null;
+  message: string;
+};
+
+export type APIScheduleImportResult = {
+  imported: number;
+  skipped: number;
+  errors: APIScheduleImportError[];
+};
+
 export const scheduleModel = {
   toExternal(schedule: ScheduleEntity): APIScheduleEntity {
     return {

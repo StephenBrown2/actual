@@ -36,7 +36,11 @@ import {
   scheduleModel,
   tagModel,
 } from './api-models';
-import type { AmountOPType, APIScheduleEntity } from './api-models';
+import type {
+  AmountOPType,
+  APIScheduleEntity,
+  APIScheduleImportResult,
+} from './api-models';
 import { aqlQuery } from './aql';
 import * as cloudStorage from './cloud-storage';
 import type { RemoteFile } from './cloud-storage';
@@ -810,6 +814,20 @@ handlers['api/schedules-get'] = async function () {
   const schedules = data as ScheduleEntity[];
   return schedules.map(schedule => scheduleModel.toExternal(schedule));
 };
+
+handlers['api/schedules-export'] = async function () {
+  checkFileOpen();
+  return handlers['schedule/export']();
+};
+
+handlers['api/schedules-import'] = withMutation(async function ({
+  content,
+}: {
+  content: string;
+}): Promise<APIScheduleImportResult> {
+  checkFileOpen();
+  return handlers['schedule/import']({ content });
+});
 
 handlers['api/schedule-create'] = withMutation(async function (
   schedule: Omit<APIScheduleEntity, 'id'>,

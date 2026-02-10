@@ -177,3 +177,57 @@ Next you can select all the matching transactions that you want to apply this ru
 ![Rule associated with the mortgage schedule](/img/schedules/schedules-rule-apply-action.webp)
 
 Save the rule and any time this scheduled transaction gets entered into the register it can be automatically categorized with a helpful note.
+
+## Exporting and Importing Schedules
+
+You can export schedules from the Schedules page and import them into another budget.
+
+- **Export schedules** creates a `.json5` file that contains schedules and their linked rule conditions/actions.
+- **Import schedules** reads that `.json5` file and recreates schedules in the current budget.
+
+This is useful when you want to:
+
+- reuse your recurring setup in a new budget,
+- copy only schedules (without copying the entire budget file),
+- share a schedule template between personal and test budgets.
+
+### What gets transferred
+
+The import/export file includes:
+
+- schedule settings (name, frequency/date, amount settings, auto-post setting),
+- linked rule conditions and actions used by that schedule.
+
+### Name-based matching behavior
+
+During import, references are matched by **name** (not by id):
+
+- accounts are matched by account name,
+- payees are matched by payee name,
+- categories in rule conditions/actions are matched by category name.
+
+For categories, the export also includes the category group name when available. On import, Actual uses `(category name + group name)` to resolve categories when needed.
+
+If a payee does not exist, it is created automatically.
+
+### Caveats and common edge cases
+
+1. **Duplicate schedule names**
+   - Schedule names are unique when provided.
+   - If a schedule with the same name already exists, that imported schedule is skipped and reported as an error.
+
+2. **Unnamed schedules**
+   - Unnamed schedules are allowed.
+   - Because they do not have a unique name key, importing the same file repeatedly can create additional unnamed schedules.
+
+3. **Missing dependencies**
+   - If a required account or category is not present in the destination budget, that schedule is skipped.
+   - Import continues for other schedules and shows a summary of imported/skipped items.
+
+4. **Ambiguous category names**
+   - If multiple categories share the same name, Actual uses the exported group name to disambiguate.
+   - If a matching category cannot be found within that group (or if no disambiguation info is available), that schedule is skipped and reported as an error.
+
+5. **Rule link actions**
+   - Schedule-link actions are re-created during import with the new schedule id.
+   - You do not need to manually fix schedule links after importing.

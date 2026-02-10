@@ -19,6 +19,10 @@ import type { ImportableBudgetType } from '../importers';
 import { app as mainApp } from '../main-app';
 import { mutator } from '../mutators';
 import * as prefs from '../prefs';
+import {
+  exportSchedules as exportSchedulesJSON5,
+  importSchedules as importSchedulesJSON5,
+} from '../schedules/app';
 import { getServer } from '../server-config';
 import * as sheet from '../sheet';
 import { clearFullSyncTimeout, initialFullSync, setSyncingMode } from '../sync';
@@ -60,6 +64,8 @@ export type BudgetFileHandlers = {
   'create-budget': typeof createBudget;
   'import-budget': typeof importBudget;
   'export-budget': typeof exportBudget;
+  'import-schedules': typeof importSchedules;
+  'export-schedules': typeof exportSchedules;
   'upload-file-web': typeof uploadFileWeb;
   'backups-get': typeof getBackups;
   'backup-load': typeof loadBackup;
@@ -84,6 +90,8 @@ app.method('duplicate-budget', duplicateBudget);
 app.method('create-budget', createBudget);
 app.method('import-budget', importBudget);
 app.method('export-budget', exportBudget);
+app.method('import-schedules', importSchedules);
+app.method('export-schedules', exportSchedules);
 app.method('upload-file-web', uploadFileWeb);
 app.method('backups-get', getBackups);
 app.method('backup-load', loadBackup);
@@ -483,6 +491,39 @@ async function exportBudget() {
     };
   } catch (err) {
     err.message = 'Error exporting budget: ' + err.message;
+    captureException(err);
+    return { error: 'internal-error' };
+  }
+}
+
+async function importSchedules({ filepath }: { filepath: string }): Promise<{
+  imported?: number;
+  skipped?: number;
+  errors?: Array<{ scheduleName: string | null; message: string }>;
+  error?: string;
+}> {
+  try {
+    if (!(await fs.exists(filepath))) {
+      throw new Error(`File not found at the provided path: ${filepath}`);
+    }
+
+    const content = await fs.readFile(filepath);
+    return await importSchedulesJSON5({ content });
+  } catch (err) {
+    err.message = 'Error importing schedules: ' + err.message;
+    captureException(err);
+    return { error: 'internal-error' };
+  }
+}
+
+async function exportSchedules() {
+  try {
+    const content = await exportSchedulesJSON5();
+    return {
+      data: Buffer.from(content, 'utf-8'),
+    };
+  } catch (err) {
+    err.message = 'Error exporting schedules: ' + err.message;
     captureException(err);
     return { error: 'internal-error' };
   }

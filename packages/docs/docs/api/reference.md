@@ -76,7 +76,9 @@ import APIList from './APIList';
 "getSchedules",
 "createSchedule",
 "updateSchedule",
-"deleteSchedule"
+"deleteSchedule",
+"exportSchedules",
+"importSchedules"
 ]} />
 
 <APIList title="Misc" sections={[
@@ -589,6 +591,28 @@ Update fields of a rule. `fields` can specify any field described in [`Schedule`
 #### `deleteSchedule`
 
 <Method name="deleteSchedule" args={[{ name: 'id', type: 'id' }]} returns="Promise<null>" />
+
+#### `exportSchedules`
+
+<Method name="exportSchedules" args={[]} returns="Promise<string>" />
+
+Exports schedules to a JSON5 document string.
+
+The exported payload includes schedules and their linked rule conditions/actions with references mapped by name where possible (for example account, payee, and category references).
+
+#### `importSchedules`
+
+<Method name="importSchedules" args={[{ name: 'content', type: 'string' }]} returns="Promise<{ imported: number; skipped: number; errors: { scheduleName: string | null; message: string }[] }>" />
+
+Imports schedules from a JSON5 document string produced by [`exportSchedules`](#exportschedules).
+
+Behavior:
+
+- Matches account, payee, and category references by name.
+- Category references are exported with category group metadata and imported using `(category name + group name)` when available, which disambiguates duplicate category names across groups.
+- Automatically creates missing payees by name.
+- Skips schedules that cannot be imported (for example, missing accounts/categories, duplicate schedule names, or unresolved/ambiguous category mappings) and reports per-schedule errors.
+- Preserves rule actions, and always re-links schedules using the newly created schedule id.
 
 ## Misc
 

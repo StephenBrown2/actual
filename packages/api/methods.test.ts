@@ -1,6 +1,8 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
+import JSON5 from 'json5';
+
 import type { RuleEntity } from 'loot-core/types/models';
 
 import * as api from './index';
@@ -996,4 +998,76 @@ test('Schedules: successfully complete schedules operations', async () => {
       expect.not.objectContaining({ id: ScheduleId2 }),
     ]),
   );
+});
+
+test('Schedules: exports and imports schedule JSON5 via API methods', async () => {
+  await api.loadBudget(budgetName);
+
+  const accountId = await api.createAccount({ name: 'Schedule Checking' }, 0);
+  await api.createSchedule({
+    name: 'Exported Schedule',
+    posts_transaction: true,
+    account: accountId,
+    amount: -2200,
+    amountOp: 'is',
+    date: '2025-06-13',
+  });
+
+  const exported = await api.exportSchedules();
+  const payload = JSON5.parse(exported);
+  expect(payload.version).toBe(1);
+  expect(payload.schedules).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        name: 'Exported Schedule',
+      }),
+    ]),
+  );
+
+  const existingSchedules = await api.getSchedules();
+  await Promise.all(
+    existingSchedules.map(schedule => api.deleteSchedule(schedule.id)),
+  );
+
+  const importResult = await api.importSchedules(exported);
+  expect(importResult.imported).toBe(1);
+  expect(importResult.skipped).toBe(0);
+
+  const schedules = await api.getSchedules();
+  expect(schedules).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        name: 'Exported Schedule',
+      }),
+    ]),
+  );
+});
+
+test('Schedules: import reports missing account dependencies', async () => {
+  await api.loadBudget(budgetName);
+
+  const content = JSON.stringify({
+    version: 1,
+    exportedAt: '2026-02-10T00:00:00.000Z',
+    schedules: [
+      {
+        name: 'Missing Account Schedule',
+        posts_transaction: false,
+        rule: {
+          conditionsOp: 'and',
+          conditions: [
+            { op: 'is', field: 'account', value: 'Unknown Account' },
+            { op: 'is', field: 'date', value: '2025-02-01' },
+          ],
+          actions: [],
+        },
+      },
+    ],
+  });
+
+  const result = await api.importSchedules(content);
+  expect(result.imported).toBe(0);
+  expect(result.skipped).toBe(1);
+  expect(result.errors[0].scheduleName).toBe('Missing Account Schedule');
+  expect(result.errors[0].message).toContain('Account not found');
 });
