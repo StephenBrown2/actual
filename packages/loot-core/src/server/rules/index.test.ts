@@ -908,7 +908,7 @@ describe('Rule', () => {
               options: {
                 splitIndex: 1,
                 method: 'formula',
-                formula: '=INTEGER_TO_AMOUNT(parent_amount) * 0.5',
+                formula: '=INTEGER_TO_AMOUNT(parent_amount, 2) * 0.5',
               },
             },
             {

@@ -78,6 +78,7 @@ async function createScheduleList(
       amount: scheduleAmount,
       category: category.id,
       subtransactions: [],
+      _decimalPlaces: currency.decimalPlaces,
     });
     const categorySubtransactions = subtransactions?.filter(
       t => t.category === category.id,

@@ -1,8 +1,19 @@
 // @ts-strict-ignore
 import { stringify as csvStringify } from 'csv-stringify/sync';
 
+import { getCurrency } from '../../../shared/currencies';
 import { integerToAmount } from '../../../shared/util';
 import { aqlQuery } from '../../aql';
+import * as db from '../../db';
+
+async function getDecimalPlaces(): Promise<number> {
+  const currencyPref = await db.first<Pick<db.DbPreference, 'value'>>(
+    'SELECT value FROM preferences WHERE id = ?',
+    ['defaultCurrencyCode'],
+  );
+  const defaultCurrencyCode = currencyPref?.value ?? '';
+  return getCurrency(defaultCurrencyCode).decimalPlaces;
+}
 
 export async function exportToCSV(
   transactions,
@@ -10,6 +21,7 @@ export async function exportToCSV(
   categoryGroups,
   payees,
 ) {
+  const decimalPlaces = await getDecimalPlaces();
   const accountNamesById = accounts.reduce((reduced, { id, name }) => {
     reduced[id] = name;
     return reduced;
@@ -47,7 +59,7 @@ export async function exportToCSV(
       Payee: payeeNamesById[payee],
       Notes: notes,
       Category: categoryNamesById[category],
-      Amount: amount == null ? 0 : integerToAmount(amount),
+      Amount: amount == null ? 0 : integerToAmount(amount, decimalPlaces),
       Cleared: cleared,
       Reconciled: reconciled,
     }),
@@ -57,6 +69,7 @@ export async function exportToCSV(
 }
 
 export async function exportQueryToCSV(query) {
+  const decimalPlaces = await getDecimalPlaces();
   const { data: transactions } = await aqlQuery(
     query
       .select([
@@ -117,8 +130,12 @@ export async function exportQueryToCSV(query) {
         ? 0
         : trans.Amount == null
           ? 0
-          : integerToAmount(trans.Amount),
-      Split_Amount: trans.IsParent ? integerToAmount(trans.Amount) : 0,
+          : integerToAmount(trans.Amount, decimalPlaces),
+      Split_Amount: trans.IsParent
+        ? trans.Amount == null
+          ? null
+          : integerToAmount(trans.Amount, decimalPlaces)
+        : 0,
       Cleared:
         trans.Reconciled === true
           ? 'Reconciled'

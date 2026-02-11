@@ -10,7 +10,7 @@ export class CustomFunctionsPlugin extends FunctionPlugin {
       ast.args,
       state,
       this.metadata('INTEGER_TO_AMOUNT'),
-      (integerAmount: number, decimalPlaces: number = 2) => {
+      (integerAmount: number, decimalPlaces: number) => {
         return integerToAmount(integerAmount, decimalPlaces);
       },
     );
@@ -21,8 +21,8 @@ export class CustomFunctionsPlugin extends FunctionPlugin {
       ast.args,
       state,
       this.metadata('FIXED'),
-      (number: number, decimals: number = 0) => {
-        return Number(number).toFixed(decimals);
+      (number: number, decimalPlaces: number = 0) => {
+        return Number(number).toFixed(decimalPlaces);
       },
     );
   }

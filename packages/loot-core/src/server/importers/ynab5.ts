@@ -2,6 +2,7 @@
 import { v4 as uuidv4 } from 'uuid';
 
 import { logger } from '../../platform/server/log';
+import { getCurrency } from '../../shared/currencies';
 import * as monthUtils from '../../shared/months';
 import { q } from '../../shared/query';
 import { groupBy, sortByKey } from '../../shared/util';
@@ -68,10 +69,36 @@ function findIdByName<T extends { id: string; name: string }>(
   return findByNameIgnoreCase<T>(categories, name)?.id;
 }
 
-function amountFromYnab(amount: number) {
-  // YNAB multiplies amount by 1000 and Actual by 100
-  // so, this function divides by 10
-  return Math.round(amount / 10);
+function amountFromYnab(amount: number, decimalPlaces: number) {
+  // YNAB API uses millicents (×1000); Actual uses integer = amount × 10^decimalPlaces
+  return Math.round((amount * Math.pow(10, decimalPlaces)) / 1000);
+}
+
+function getYnab5DecimalPlaces(data: Budget): number {
+  const cf = data.currency_format;
+  // Prefer API decimal_digits (including 0 for zero-decimal currencies); fall back to ISO code.
+  const decimalPlaces = cf?.decimal_digits;
+  if (
+    typeof decimalPlaces === 'number' &&
+    Number.isInteger(decimalPlaces) &&
+    decimalPlaces >= 0 &&
+    decimalPlaces <= 10
+  ) {
+    return decimalPlaces;
+  }
+  const code = cf?.iso_code?.trim() ?? '';
+  if (!code) {
+    throw new Error(
+      'currency_format is missing both valid decimal_digits and a non-empty iso_code; cannot determine decimal places.',
+    );
+  }
+  const currency = getCurrency(code);
+  if (currency.code !== code) {
+    throw new Error(
+      `unknown currency ISO code "${code}". Add it to supported currencies or ensure decimal_digits is present in the YNAB export.`,
+    );
+  }
+  return currency.decimalPlaces;
 }
 
 function getDayOfMonth(date: string) {
@@ -570,6 +597,7 @@ async function importTransactions(
   data: Budget,
   entityIdMap: Map<string, string>,
   flagNameConflicts: Set<string>,
+  decimalPlaces: number,
 ) {
   const payees = await send('api/payees-get');
   const categories = await send('api/categories-get', {
@@ -760,7 +788,7 @@ async function importTransactions(
             id: entityIdMap.get(transaction.id),
             account: entityIdMap.get(transaction.account_id),
             date: transaction.date,
-            amount: amountFromYnab(transaction.amount),
+            amount: amountFromYnab(transaction.amount, decimalPlaces),
             category: entityIdMap.get(transaction.category_id) || null,
             cleared: ['cleared', 'reconciled'].includes(transaction.cleared),
             reconciled: transaction.cleared === 'reconciled',
@@ -774,7 +802,7 @@ async function importTransactions(
               ? subtransactions.map(subtrans => {
                   return {
                     id: entityIdMap.get(subtrans.id),
-                    amount: amountFromYnab(subtrans.amount),
+                    amount: amountFromYnab(subtrans.amount, decimalPlaces),
                     category: entityIdMap.get(subtrans.category_id) || null,
                     notes: subtrans.memo,
                     transfer_id:
@@ -851,6 +879,7 @@ async function importScheduledTransactions(
   data: Budget,
   entityIdMap: Map<string, string>,
   flagNameConflicts: Set<string>,
+  decimalPlaces: number,
 ) {
   const scheduledTransactions = data.scheduled_transactions;
   const scheduledSubtransactionsGrouped = groupBy(
@@ -956,7 +985,7 @@ async function importScheduledTransactions(
       posts_transaction: false,
       payee: mappedPayeeId,
       account: mappedAccountId,
-      amount: amountFromYnab(scheduled.amount),
+      amount: amountFromYnab(scheduled.amount, decimalPlaces),
       amountOp: 'is',
       date: scheduleDate,
     });
@@ -1027,7 +1056,7 @@ async function importScheduledTransactions(
 
         actions.push({
           op: 'set-split-amount',
-          value: amountFromYnab(subtransaction.amount),
+          value: amountFromYnab(subtransaction.amount, decimalPlaces),
           options: { splitIndex, method: 'fixed-amount' },
         });
 
@@ -1094,7 +1123,11 @@ async function importScheduledTransactions(
   }
 }
 
-async function importBudgets(data: Budget, entityIdMap: Map<string, string>) {
+async function importBudgets(
+  data: Budget,
+  entityIdMap: Map<string, string>,
+  decimalPlaces: number,
+) {
   // There should be info in the docs to deal with
   // no credit card category and how YNAB and Actual
   // handle differently the amount To be Budgeted
@@ -1122,7 +1155,7 @@ async function importBudgets(data: Budget, entityIdMap: Map<string, string>) {
       await Promise.all(
         budget.categories.map(async catBudget => {
           const catId = entityIdMap.get(catBudget.id);
-          const amount = Math.round(catBudget.budgeted / 10);
+          const amount = amountFromYnab(catBudget.budgeted, decimalPlaces);
 
           if (
             !catId ||
@@ -1165,6 +1198,16 @@ export async function doImport(data: Budget) {
   const entityIdMap = new Map<string, string>();
   const flagNameConflicts = getFlagNameConflicts(data);
 
+  let decimalPlaces: number;
+  try {
+    decimalPlaces = getYnab5DecimalPlaces(data);
+  } catch (e) {
+    logger.warn(
+      `YNAB import: ${normalizeError(e)} Defaulting to 2 decimal places.`,
+    );
+    decimalPlaces = 2;
+  }
+
   logger.log('Importing Accounts...');
   await importAccounts(data, entityIdMap);
 
@@ -1181,13 +1224,23 @@ export async function doImport(data: Budget) {
   await importFlagsAsTags(data, flagNameConflicts);
 
   logger.log('Importing Transactions...');
-  await importTransactions(data, entityIdMap, flagNameConflicts);
+  await importTransactions(data, entityIdMap, flagNameConflicts, decimalPlaces);
 
   logger.log('Importing Scheduled Transactions...');
-  await importScheduledTransactions(data, entityIdMap, flagNameConflicts);
+  await importScheduledTransactions(
+    data,
+    entityIdMap,
+    flagNameConflicts,
+    decimalPlaces,
+  );
 
   logger.log('Importing Budgets...');
-  await importBudgets(data, entityIdMap);
+  await importBudgets(data, entityIdMap, decimalPlaces);
+
+  await send('preferences/save', {
+    id: 'defaultCurrencyCode',
+    value: data.currency_format?.iso_code ?? '',
+  });
 
   logger.log('Setting up...');
 }

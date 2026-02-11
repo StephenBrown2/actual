@@ -3,6 +3,7 @@ import { getClock } from '@actual-app/crdt';
 
 import * as connection from '../platform/server/connection';
 import { logger } from '../platform/server/log';
+import { getCurrency } from '../shared/currencies';
 import {
   getBankSyncError,
   getDownloadError,
@@ -580,13 +581,23 @@ handlers['api/account-create'] = withMutation(async function ({
   initialBalance = null,
 }) {
   checkFileOpen();
+  const currencyPref = await db.first<Pick<db.DbPreference, 'value'>>(
+    'SELECT value FROM preferences WHERE id = ?',
+    ['defaultCurrencyCode'],
+  );
+  const defaultCurrencyCode = currencyPref?.value ?? '';
+  const decimalPlaces = getCurrency(defaultCurrencyCode).decimalPlaces;
   return handlers['account-create']({
     name: account.name,
     offBudget: account.offbudget,
     closed: account.closed,
+    decimalPlaces,
     // Current the API expects an amount but it really should expect
     // an integer
-    balance: initialBalance != null ? integerToAmount(initialBalance) : null,
+    balance:
+      initialBalance != null
+        ? integerToAmount(initialBalance, decimalPlaces)
+        : null,
   });
 });
 

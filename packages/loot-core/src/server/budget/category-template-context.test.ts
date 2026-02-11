@@ -86,7 +86,7 @@ describe('CategoryTemplateContext', () => {
       );
 
       const result = CategoryTemplateContext.runSimple(template, instance);
-      expect(result).toBe(amountToInteger(100));
+      expect(result).toBe(amountToInteger(100, 2));
     });
 
     it('should return limit when monthly is not provided', () => {
@@ -112,7 +112,7 @@ describe('CategoryTemplateContext', () => {
       );
 
       const result = CategoryTemplateContext.runSimple(template, instance);
-      expect(result).toBe(amountToInteger(500));
+      expect(result).toBe(amountToInteger(500, 2));
     });
 
     it('should handle weekly limit', async () => {
@@ -353,7 +353,7 @@ describe('CategoryTemplateContext', () => {
       };
 
       const result = CategoryTemplateContext.runPeriodic(template, instance);
-      expect(result).toBe(amountToInteger(500));
+      expect(result).toBe(amountToInteger(500, 2));
     });
 
     it('should calculate weekly amount for multiple weeks', () => {
@@ -370,7 +370,7 @@ describe('CategoryTemplateContext', () => {
       };
 
       const result = CategoryTemplateContext.runPeriodic(template, instance);
-      expect(result).toBe(amountToInteger(300));
+      expect(result).toBe(amountToInteger(300, 2));
     });
 
     it('should handle weeks spanning multiple months', () => {
@@ -387,7 +387,7 @@ describe('CategoryTemplateContext', () => {
       };
 
       const result = CategoryTemplateContext.runPeriodic(template, instance);
-      expect(result).toBe(amountToInteger(100));
+      expect(result).toBe(amountToInteger(100, 2));
     });
 
     it('should handle periodic days', () => {
@@ -404,7 +404,7 @@ describe('CategoryTemplateContext', () => {
       };
 
       const result = CategoryTemplateContext.runPeriodic(template, instance);
-      expect(result).toBe(amountToInteger(400)); // for the 1st, 11th, 21st, 31st
+      expect(result).toBe(amountToInteger(400, 2)); // for the 1st, 11th, 21st, 31st
     });
 
     it('should handle periodic years', () => {
@@ -421,7 +421,7 @@ describe('CategoryTemplateContext', () => {
       };
 
       const result = CategoryTemplateContext.runPeriodic(template, instance);
-      expect(result).toBe(amountToInteger(100));
+      expect(result).toBe(amountToInteger(100, 2));
     });
 
     it('should handle periodic months', () => {
@@ -438,7 +438,7 @@ describe('CategoryTemplateContext', () => {
       };
 
       const result = CategoryTemplateContext.runPeriodic(template, instance);
-      expect(result).toBe(amountToInteger(100));
+      expect(result).toBe(amountToInteger(100, 2));
     });
   });
 
@@ -1151,7 +1151,7 @@ describe('CategoryTemplateContext', () => {
       // Mock the sheet values needed for init
       vi.mocked(actions.getSheetValue).mockResolvedValueOnce(0); // lastMonthBalance
       vi.mocked(actions.getSheetBoolean).mockResolvedValueOnce(false); // carryover
-      vi.mocked(actions.isReflectBudget).mockResolvedValueOnce(false);
+      vi.mocked(actions.isReflectBudget).mockReturnValueOnce(false);
       mockPreferences(false, 'USD');
 
       // Initialize the template
@@ -1216,7 +1216,7 @@ describe('CategoryTemplateContext', () => {
       // Mock the sheet values needed for init
       vi.mocked(actions.getSheetValue).mockResolvedValueOnce(0); // lastMonthBalance
       vi.mocked(actions.getSheetBoolean).mockResolvedValueOnce(false); // carryover
-      vi.mocked(actions.isReflectBudget).mockResolvedValueOnce(false);
+      vi.mocked(actions.isReflectBudget).mockReturnValueOnce(false);
       mockPreferences(false, 'USD');
 
       // Initialize the template
@@ -1271,7 +1271,7 @@ describe('CategoryTemplateContext', () => {
       // Mock the sheet values needed for init
       vi.mocked(actions.getSheetValue).mockResolvedValueOnce(0); // lastMonthBalance
       vi.mocked(actions.getSheetBoolean).mockResolvedValueOnce(false); // carryover
-      vi.mocked(actions.isReflectBudget).mockResolvedValueOnce(false);
+      vi.mocked(actions.isReflectBudget).mockReturnValueOnce(false);
       mockPreferences(false, 'USD');
 
       // Initialize the template
@@ -1331,7 +1331,7 @@ describe('CategoryTemplateContext', () => {
       // Mock the sheet values needed for init
       vi.mocked(actions.getSheetValue).mockResolvedValueOnce(0); // lastMonthBalance
       vi.mocked(actions.getSheetBoolean).mockResolvedValueOnce(false); // carryover
-      vi.mocked(actions.isReflectBudget).mockResolvedValueOnce(false);
+      vi.mocked(actions.isReflectBudget).mockReturnValueOnce(false);
       mockPreferences(false, 'USD');
 
       // Initialize the template
@@ -1374,7 +1374,7 @@ describe('CategoryTemplateContext', () => {
       // Mock the sheet values needed for init
       vi.mocked(actions.getSheetValue).mockResolvedValueOnce(10000); // lastMonthBalance
       vi.mocked(actions.getSheetBoolean).mockResolvedValueOnce(false); // carryover
-      vi.mocked(actions.isReflectBudget).mockResolvedValueOnce(false);
+      vi.mocked(actions.isReflectBudget).mockReturnValueOnce(false);
       mockPreferences(false, 'USD');
 
       // Initialize the template
@@ -1419,7 +1419,7 @@ describe('CategoryTemplateContext', () => {
       // Mock the sheet values needed for init
       vi.mocked(actions.getSheetValue).mockResolvedValueOnce(0); // lastMonthBalance
       vi.mocked(actions.getSheetBoolean).mockResolvedValueOnce(false); // carryover
-      vi.mocked(actions.isReflectBudget).mockResolvedValueOnce(false);
+      vi.mocked(actions.isReflectBudget).mockReturnValueOnce(false);
       mockPreferences(true, 'USD');
 
       // Initialize the template
@@ -1462,7 +1462,7 @@ describe('CategoryTemplateContext', () => {
 
       vi.mocked(actions.getSheetValue).mockResolvedValueOnce(0);
       vi.mocked(actions.getSheetBoolean).mockResolvedValueOnce(false);
-      vi.mocked(actions.isReflectBudget).mockResolvedValueOnce(false);
+      vi.mocked(actions.isReflectBudget).mockReturnValueOnce(false);
       mockPreferences(true, 'JPY');
 
       const instance = await CategoryTemplateContext.init(
@@ -1494,7 +1494,7 @@ describe('CategoryTemplateContext', () => {
 
       vi.mocked(actions.getSheetValue).mockResolvedValueOnce(0);
       vi.mocked(actions.getSheetBoolean).mockResolvedValueOnce(false);
-      vi.mocked(actions.isReflectBudget).mockResolvedValueOnce(false);
+      vi.mocked(actions.isReflectBudget).mockReturnValueOnce(false);
       mockPreferences(true, 'JPY');
 
       const instance = await CategoryTemplateContext.init(
@@ -1526,6 +1526,7 @@ describe('CategoryTemplateContext', () => {
 
       vi.mocked(actions.getSheetValue).mockResolvedValueOnce(0);
       vi.mocked(actions.getSheetBoolean).mockResolvedValueOnce(false);
+      vi.mocked(actions.isReflectBudget).mockReturnValueOnce(false);
       mockPreferences(true, 'JPY');
 
       const instance = await CategoryTemplateContext.init(
@@ -1562,6 +1563,7 @@ describe('CategoryTemplateContext', () => {
 
       vi.mocked(actions.getSheetValue).mockResolvedValueOnce(0);
       vi.mocked(actions.getSheetBoolean).mockResolvedValueOnce(false);
+      vi.mocked(actions.isReflectBudget).mockReturnValueOnce(false);
       mockPreferences(true, 'JPY');
 
       const instance = await CategoryTemplateContext.init(
@@ -1595,6 +1597,7 @@ describe('CategoryTemplateContext', () => {
 
       vi.mocked(actions.getSheetValue).mockResolvedValueOnce(0);
       vi.mocked(actions.getSheetBoolean).mockResolvedValueOnce(false);
+      vi.mocked(actions.isReflectBudget).mockReturnValueOnce(false);
       mockPreferences(true, 'JPY');
 
       const instance = await CategoryTemplateContext.init(
@@ -1627,6 +1630,7 @@ describe('CategoryTemplateContext', () => {
 
       vi.mocked(actions.getSheetValue).mockResolvedValueOnce(0);
       vi.mocked(actions.getSheetBoolean).mockResolvedValueOnce(false);
+      vi.mocked(actions.isReflectBudget).mockReturnValueOnce(false);
       mockPreferences(true, 'JPY');
 
       const instanceJPY = await CategoryTemplateContext.init(
@@ -1640,6 +1644,7 @@ describe('CategoryTemplateContext', () => {
 
       vi.mocked(actions.getSheetValue).mockResolvedValueOnce(0);
       vi.mocked(actions.getSheetBoolean).mockResolvedValueOnce(false);
+      vi.mocked(actions.isReflectBudget).mockReturnValueOnce(false);
       mockPreferences(false, 'USD');
 
       const instanceUSD = await CategoryTemplateContext.init(

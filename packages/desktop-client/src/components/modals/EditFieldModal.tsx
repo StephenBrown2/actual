@@ -10,7 +10,11 @@ import { View } from '@actual-app/components/view';
 import { format as formatDate, parse as parseDate, parseISO } from 'date-fns';
 
 import { currentDay, dayFromDate } from 'loot-core/shared/months';
-import { amountToInteger, currencyToInteger } from 'loot-core/shared/util';
+import {
+  amountToInteger,
+  currencyToAmount,
+  getFractionDigitCount,
+} from 'loot-core/shared/util';
 
 import {
   Modal,
@@ -21,6 +25,7 @@ import { SectionLabel } from '@desktop-client/components/forms';
 import { LabeledCheckbox } from '@desktop-client/components/forms/LabeledCheckbox';
 import { DateSelect } from '@desktop-client/components/select/DateSelect';
 import { useDateFormat } from '@desktop-client/hooks/useDateFormat';
+import { useFormat } from '@desktop-client/hooks/useFormat';
 import type { Modal as ModalType } from '@desktop-client/modals/modalsSlice';
 
 const itemStyle: CSSProperties = {
@@ -52,6 +57,7 @@ export function EditFieldModal({
   onClose,
 }: EditFieldModalProps) {
   const { t } = useTranslation();
+  const decimalPlaces = useFormat().currency.decimalPlaces;
   const dateFormat = useDateFormat() || 'MM/dd/yyyy';
   const noteInputRef = useRef<HTMLInputElement | null>(null);
   const noteReplaceInputRef = useRef<HTMLInputElement | null>(null);
@@ -62,24 +68,30 @@ export function EditFieldModal({
     }
   }
 
-  function onSelect(value: string | number) {
-    if (value != null) {
-      // Process the value if needed
-      if (name === 'amount') {
-        if (typeof value === 'string') {
-          const parsed = currencyToInteger(value);
-          if (parsed === null) {
-            alert(t('Invalid amount value'));
-            return;
-          }
-          value = parsed;
-        } else if (typeof value === 'number') {
-          value = amountToInteger(value);
-        }
-      }
-
-      onSubmit(name, value);
+  function onSelect(value: string | number): boolean {
+    if (value == null) {
+      return false;
     }
+    // Process the value if needed
+    if (name === 'amount') {
+      if (typeof value === 'string') {
+        const parsed = currencyToAmount(value);
+        if (parsed == null) {
+          alert(t('Invalid amount value'));
+          return false;
+        }
+        if (getFractionDigitCount(value) > decimalPlaces) {
+          alert(t('Invalid amount value'));
+          return false;
+        }
+        value = amountToInteger(parsed, decimalPlaces);
+      } else if (typeof value === 'number') {
+        value = amountToInteger(value, decimalPlaces);
+      }
+    }
+
+    onSubmit(name, value);
+    return true;
   }
 
   const { isNarrowWidth } = useResponsive();
@@ -111,8 +123,11 @@ export function EditFieldModal({
           dateFormat={dateFormat}
           embedded
           onSelect={date => {
-            onSelect(dayFromDate(parseDate(date, 'yyyy-MM-dd', new Date())));
-            close();
+            if (
+              onSelect(dayFromDate(parseDate(date, 'yyyy-MM-dd', new Date())))
+            ) {
+              close();
+            }
           }}
         />
       );
@@ -245,8 +260,9 @@ export function EditFieldModal({
       editor = ({ close }) => (
         <Input
           onEnter={value => {
-            onSelect(value);
-            close();
+            if (onSelect(value)) {
+              close();
+            }
           }}
           style={inputStyle}
         />

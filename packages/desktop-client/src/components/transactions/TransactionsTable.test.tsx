@@ -447,7 +447,7 @@ describe('Transactions', () => {
       );
       if (transaction.amount < 0) {
         expect(queryField(container, 'debit', 'div', idx).textContent).toBe(
-          integerToCurrency(-transaction.amount),
+          integerToCurrency(-transaction.amount, 2),
         );
         expect(queryField(container, 'credit', 'div', idx).textContent).toBe(
           '',
@@ -455,7 +455,7 @@ describe('Transactions', () => {
       } else {
         expect(queryField(container, 'debit', 'div', idx).textContent).toBe('');
         expect(queryField(container, 'credit', 'div', idx).textContent).toBe(
-          integerToCurrency(transaction.amount),
+          integerToCurrency(transaction.amount, 2),
         );
       }
     });

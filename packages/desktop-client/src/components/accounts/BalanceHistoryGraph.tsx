@@ -11,11 +11,12 @@ import { eachMonthOfInterval, format, subMonths } from 'date-fns';
 import { Area, AreaChart, Tooltip as RechartsTooltip, YAxis } from 'recharts';
 
 import * as monthUtils from 'loot-core/shared/months';
-import { integerToCurrency } from 'loot-core/shared/util';
 
+import { FinancialText } from '@desktop-client/components/FinancialText';
 import { PrivacyFilter } from '@desktop-client/components/PrivacyFilter';
 import { useRechartsAnimation } from '@desktop-client/components/reports/chart-theme';
 import { LoadingIndicator } from '@desktop-client/components/reports/LoadingIndicator';
+import { useFormat } from '@desktop-client/hooks/useFormat';
 import { useLocale } from '@desktop-client/hooks/useLocale';
 import * as query from '@desktop-client/queries';
 import { liveQuery } from '@desktop-client/queries/liveQuery';
@@ -34,6 +35,7 @@ export function BalanceHistoryGraph({
   ref,
 }: BalanceHistoryGraphProps) {
   const locale = useLocale();
+  const formatCurrency = useFormat();
   const animationProps = useRechartsAnimation({ isAnimationActive: false });
   const [balanceData, setBalanceData] = useState<
     Array<{ date: string; balance: number }>
@@ -316,7 +318,9 @@ export function BalanceHistoryGraph({
                         {hoveredValue.date}
                       </Text>
                       <PrivacyFilter activationFilters={[() => !isHovered]}>
-                        <Text>{integerToCurrency(hoveredValue.balance)}</Text>
+                        <FinancialText>
+                          {formatCurrency(hoveredValue.balance, 'financial')}
+                        </FinancialText>
                       </PrivacyFilter>
                     </View>
                   )}

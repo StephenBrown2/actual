@@ -18,6 +18,7 @@ import {
   removeCategoriesFromGroups,
 } from '@desktop-client/components/budget/util';
 import { useCategories } from '@desktop-client/hooks/useCategories';
+import { useFormat } from '@desktop-client/hooks/useFormat';
 
 type CoverMenuProps = {
   showToBeBudgeted?: boolean;
@@ -35,6 +36,7 @@ export function CoverMenu({
   onClose,
 }: CoverMenuProps) {
   const { t } = useTranslation();
+  const decimalPlaces = useFormat().currency.decimalPlaces;
 
   const { data: { grouped: originalCategoryGroups } = { grouped: [] } } =
     useCategories();
@@ -51,13 +53,16 @@ export function CoverMenu({
       : categoryGroups;
   }, [categoryId, showToBeBudgeted, originalCategoryGroups]);
 
-  const _initialAmount = integerToCurrency(Math.abs(initialAmount ?? 0));
+  const _initialAmount = integerToCurrency(
+    Math.abs(initialAmount ?? 0),
+    decimalPlaces,
+  );
   const [amount, setAmount] = useState<string>(_initialAmount);
 
   function _onSubmit() {
     const parsedAmount = evalArithmetic(amount || '');
     if (parsedAmount && fromCategoryId) {
-      onSubmit(amountToInteger(parsedAmount), fromCategoryId);
+      onSubmit(amountToInteger(parsedAmount, decimalPlaces), fromCategoryId);
     }
     onClose();
   }

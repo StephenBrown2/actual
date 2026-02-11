@@ -31,6 +31,7 @@ export type TransactionUpdateFunction = <T extends keyof SerializedTransaction>(
 
 export function serializeTransaction(
   transaction: TransactionEntity,
+  decimalPlaces: number,
   showZeroInDeposit?: boolean,
 ): SerializedTransaction {
   const { amount, date: originalDate } = transaction;
@@ -62,16 +63,23 @@ export function serializeTransaction(
   return {
     ...transaction,
     date,
-    debit: debit != null ? integerToCurrencyWithDecimal(debit) : '',
-    credit: credit != null ? integerToCurrencyWithDecimal(credit) : '',
+    debit:
+      debit != null ? integerToCurrencyWithDecimal(debit, decimalPlaces) : '',
+    credit:
+      credit != null ? integerToCurrencyWithDecimal(credit, decimalPlaces) : '',
   };
 }
 
 export function deserializeTransaction(
   transaction: SerializedTransaction,
   originalTransaction: TransactionEntity,
+  decimalPlaces: number,
 ) {
   const { debit, credit, date: originalDate, ...realTransaction } = transaction;
+
+  // Tolerance for float noise when checking if parsed amount round-trips at decimalPlaces
+  const ROUND_TRIP_TOLERANCE = 1e-9;
+  const scale = 10 ** decimalPlaces;
 
   let amount: number | null;
   if (debit !== '') {
@@ -81,8 +89,19 @@ export function deserializeTransaction(
     amount = evalArithmetic(credit, null);
   }
 
-  amount =
-    amount != null ? amountToInteger(amount) : originalTransaction.amount;
+  if (amount != null) {
+    const scaled = Math.abs(amount) * scale;
+    const canRoundTrip =
+      Math.abs(scaled - Math.round(scaled)) < ROUND_TRIP_TOLERANCE ||
+      scaled === Math.round(scaled);
+    if (!canRoundTrip) {
+      amount = originalTransaction.amount;
+    } else {
+      amount = amountToInteger(amount, decimalPlaces);
+    }
+  } else {
+    amount = originalTransaction.amount;
+  }
   let date = originalDate;
   if (date == null) {
     date = originalTransaction.date || currentDay();

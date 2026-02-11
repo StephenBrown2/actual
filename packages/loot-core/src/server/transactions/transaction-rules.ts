@@ -1,6 +1,7 @@
 // @ts-strict-ignore
 
 import { logger } from '../../platform/server/log';
+import { getCurrency } from '../../shared/currencies';
 import {
   addDays,
   currentDay,
@@ -89,6 +90,14 @@ function toInternalField<T extends { field: string }>(obj: T): T {
     ...obj,
     field: internalFields[obj.field] || obj.field,
   };
+}
+
+async function getDefaultCurrencyCode(): Promise<string> {
+  const row = await db.first<Pick<db.DbPreference, 'value'>>(
+    'SELECT value FROM preferences WHERE id = ?',
+    ['defaultCurrencyCode'],
+  );
+  return row?.value ?? '';
 }
 
 function parseArray(str) {
@@ -324,7 +333,12 @@ export async function runRules(
     accountsMap = accounts;
   }
 
-  let finalTrans = await prepareTransactionForRules({ ...trans }, accountsMap);
+  const defaultCurrencyCode = await getDefaultCurrencyCode();
+  let finalTrans = await prepareTransactionForRules(
+    { ...trans },
+    accountsMap,
+    defaultCurrencyCode,
+  );
 
   let scheduleRuleID = '';
   // Check if a schedule is attached to this transaction and if so get the rule ID attached to that schedule.
@@ -698,9 +712,10 @@ export async function applyActions(
 
   const accounts: db.DbAccount[] = await db.getAccounts();
   const accountsMap = new Map(accounts.map(account => [account.id, account]));
+  const defaultCurrencyCode = await getDefaultCurrencyCode();
   const transactionsForRules = await Promise.all(
-    transactions.map(transactions =>
-      prepareTransactionForRules(transactions, accountsMap),
+    transactions.map(trans =>
+      prepareTransactionForRules(trans, accountsMap, defaultCurrencyCode),
     ),
   );
 
@@ -938,11 +953,16 @@ export type TransactionForRules = TransactionEntity & {
   _category_name?: string;
   _account_name?: string;
   parent_amount?: number;
+  /** Decimal places from budget default currency.
+   * TODO: Use account-specific currency when
+   * DbAccount becomes currency-aware. */
+  _decimalPlaces?: number;
 };
 
 export async function prepareTransactionForRules(
   trans: TransactionEntity,
   accounts: Map<string, db.DbAccount> | null = null,
+  currencyCode?: string,
 ): Promise<TransactionForRules> {
   const r: TransactionForRules = { ...trans };
   if (trans.payee) {
@@ -1008,6 +1028,9 @@ export async function prepareTransactionForRules(
     }
   }
 
+  const resolvedCurrencyCode = currencyCode ?? (await getDefaultCurrencyCode());
+  r._decimalPlaces = getCurrency(resolvedCurrencyCode).decimalPlaces;
+
   return r;
 }
 
@@ -1039,6 +1062,10 @@ export async function finalizeTransactionForRules(
     delete trans.parent_amount;
   }
 
+  if ('_decimalPlaces' in trans) {
+    delete trans._decimalPlaces;
+  }
+
   if (trans.subtransactions?.length) {
     trans.subtransactions.forEach(stx => {
       if ('balance' in stx) {
@@ -1047,6 +1074,10 @@ export async function finalizeTransactionForRules(
 
       if ('parent_amount' in stx) {
         delete stx.parent_amount;
+      }
+
+      if ('_decimalPlaces' in stx) {
+        delete stx._decimalPlaces;
       }
     });
   }

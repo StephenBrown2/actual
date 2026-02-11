@@ -1,6 +1,11 @@
 import {
+  amountToInteger,
+  appendDecimals,
   currencyToAmount,
   getNumberFormat,
+  integerToAmount,
+  integerToCurrency,
+  integerToCurrencyWithDecimal,
   looselyParseAmount,
   setNumberFormat,
   stringToInteger,
@@ -222,6 +227,56 @@ describe('utility functions', () => {
     expect(currencyToAmount('3.')).toBe(3);
     expect(currencyToAmount('3.000')).toBe(3000);
     expect(currencyToAmount('3.000,')).toBe(3000);
+  });
+
+  test('integerToCurrencyWithDecimal respects decimalPlaces including three-decimal currencies', () => {
+    setNumberFormat({ format: 'comma-dot', hideFraction: false });
+
+    expect(integerToCurrencyWithDecimal(1000000, 0)).toBe('1,000,000');
+    expect(integerToCurrencyWithDecimal(1000001, 0)).toBe('1,000,001');
+    expect(integerToCurrencyWithDecimal(1234567, 3)).toBe('1,234.567');
+    expect(integerToCurrencyWithDecimal(1000000, 3)).toBe('1,000.000');
+  });
+
+  test('appendDecimals respects decimalPlaces including three-decimal currencies', () => {
+    setNumberFormat({ format: 'comma-dot', hideFraction: false });
+
+    expect(appendDecimals('1000000', false, 0)).toBe('1,000,000');
+    expect(appendDecimals('1000000', false, 2)).toBe('10,000.00');
+    expect(appendDecimals('1000000', false, 3)).toBe('1,000.000');
+  });
+
+  test('amountToInteger and integerToAmount round-trip for 0, 2, and 3 decimal places', () => {
+    // Zero decimals (e.g. JPY): amount 1234 -> integer 1234 -> amount 1234
+    expect(amountToInteger(1234, 0)).toBe(1234);
+    expect(integerToAmount(1234, 0)).toBe(1234);
+
+    // Two decimals (e.g. USD): amount 12.34 -> integer 1234 -> amount 12.34
+    expect(amountToInteger(12.34, 2)).toBe(1234);
+    expect(integerToAmount(1234, 2)).toBe(12.34);
+
+    // Three decimals (e.g. KWD): amount 12.345 -> integer 12345 -> amount 12.345
+    expect(amountToInteger(12.345, 3)).toBe(12345);
+    expect(integerToAmount(12345, 3)).toBe(12.345);
+  });
+
+  test('amountToInteger does not scale by wrong factor', () => {
+    // Regression: ensure 100 JPY stays 100, not 10000 or 1
+    expect(amountToInteger(100, 0)).toBe(100);
+    expect(amountToInteger(1.5, 2)).toBe(150);
+    expect(amountToInteger(1.234, 3)).toBe(1234);
+  });
+
+  test('three-decimal amount is preserved exactly (e.g. KWD 1234.123)', () => {
+    setNumberFormat({ format: 'comma-dot', hideFraction: false });
+
+    const amount = 1234.123;
+    const integer = amountToInteger(amount, 3);
+    expect(integer).toBe(1234123);
+    expect(integerToAmount(integer, 3)).toBe(1234.123);
+
+    const formatted = integerToCurrency(integer, 3);
+    expect(formatted).toBe('1,234.123');
   });
 
   test('titleFirst works with all inputs', () => {

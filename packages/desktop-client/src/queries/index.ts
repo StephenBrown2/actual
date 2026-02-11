@@ -10,7 +10,11 @@ import {
 } from 'loot-core/shared/months';
 import { q } from 'loot-core/shared/query';
 import type { Query } from 'loot-core/shared/query';
-import { amountToInteger, currencyToAmount } from 'loot-core/shared/util';
+import {
+  amountToInteger,
+  currencyToAmount,
+  getFractionDigitCount,
+} from 'loot-core/shared/util';
 import type { AccountEntity } from 'loot-core/types/models';
 import type { SyncedPrefs } from 'loot-core/types/prefs';
 
@@ -82,8 +86,12 @@ export function transactionsSearch(
   currentQuery: Query,
   search: string,
   dateFormat: SyncedPrefs['dateFormat'],
+  decimalPlaces: number,
 ) {
   const amount = currencyToAmount(search);
+  const fractionDigitsExceedPrecision =
+    amount != null && getFractionDigitCount(search) > decimalPlaces;
+  const divisor = Math.pow(10, decimalPlaces);
 
   // Support various date formats
   let parsedDate;
@@ -104,13 +112,18 @@ export function transactionsSearch(
       'account.name': { $like: `%${search}%` },
       $or: [
         isDateValid(parsedDate) && { date: dayFromDate(parsedDate) },
-        amount != null && {
-          amount: { $transform: '$abs', $eq: amountToInteger(amount) },
-        },
         amount != null &&
+          !fractionDigitsExceedPrecision && {
+            amount: {
+              $transform: '$abs',
+              $eq: amountToInteger(amount, decimalPlaces),
+            },
+          },
+        amount != null &&
+          !fractionDigitsExceedPrecision &&
           Number.isInteger(amount) && {
             amount: {
-              $transform: { $abs: { $idiv: ['$', 100] } },
+              $transform: { $abs: { $idiv: ['$', divisor] } },
               $eq: amount,
             },
           },

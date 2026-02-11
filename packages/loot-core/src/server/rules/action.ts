@@ -349,7 +349,9 @@ export class Action {
       }
 
       if (typeof cellValue === 'number') {
-        return amountToInteger(Math.round(cellValue * 100) / 100);
+        // Uses budget default currency's decimal places.
+        // TODO: Use account-specific currency when DbAccount becomes currency-aware.
+        return amountToInteger(cellValue, transaction._decimalPlaces ?? 2);
       }
 
       return cellValue;

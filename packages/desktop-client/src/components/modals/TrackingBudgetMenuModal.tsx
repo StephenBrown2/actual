@@ -28,6 +28,7 @@ import {
 import { FocusableAmountInput } from '@desktop-client/components/mobile/transactions/FocusableAmountInput';
 import { Notes } from '@desktop-client/components/Notes';
 import { useCategory } from '@desktop-client/hooks/useCategory';
+import { useFormat } from '@desktop-client/hooks/useFormat';
 import { useNotes } from '@desktop-client/hooks/useNotes';
 import type { Modal as ModalType } from '@desktop-client/modals/modalsSlice';
 import { trackingBudget } from '@desktop-client/spreadsheet/bindings';
@@ -46,6 +47,7 @@ export function TrackingBudgetMenuModal({
   onEditNotes,
   month,
 }: TrackingBudgetMenuModalProps) {
+  const decimalPlaces = useFormat().currency.decimalPlaces;
   const defaultMenuItemStyle: CSSProperties = {
     ...styles.mobileMenuItem,
     color: theme.menuItemText,
@@ -70,7 +72,7 @@ export function TrackingBudgetMenuModal({
   const [amountFocused, setAmountFocused] = useState(false);
 
   const _onUpdateBudget = (amount: number) => {
-    onUpdateBudget?.(amountToInteger(amount));
+    onUpdateBudget?.(amountToInteger(amount, decimalPlaces));
   };
 
   const _onEditNotes = () => {
@@ -120,7 +122,7 @@ export function TrackingBudgetMenuModal({
               <Trans>Budgeted</Trans>
             </Text>
             <FocusableAmountInput
-              value={integerToAmount(budgeted || 0)}
+              value={integerToAmount(budgeted || 0, decimalPlaces)}
               focused={amountFocused}
               onFocus={() => setAmountFocused(true)}
               onBlur={() => setAmountFocused(false)}

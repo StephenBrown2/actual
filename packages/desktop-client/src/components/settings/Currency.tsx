@@ -45,6 +45,7 @@ export function CurrencySettings() {
         ['JMD', t('Jamaican Dollar')],
         ['JPY', t('Japanese Yen')],
         ['KRW', t('South Korean Won')],
+        ['KWD', t('Kuwaiti Dinar')],
         ['LKR', t('Sri Lankan Rupee')],
         ['MDL', t('Moldovan Leu')],
         ['MYR', t('Malaysian Ringgit')],

@@ -121,16 +121,24 @@ export function BalanceWithCarryover({
   const budgetedValue = useSheetValue(budgeted);
   const longGoalValue = useSheetValue(longGoal);
   const isGoalTemplatesEnabled = useFeatureFlag('goalTemplatesEnabled');
+  const format = useFormat();
+  const decimalPlaces = format.currency.decimalPlaces;
   const getBalanceAmountStyle = useCallback(
     (balanceValue: number) =>
       makeBalanceAmountStyle(
         balanceValue,
+        decimalPlaces,
         isGoalTemplatesEnabled ? goalValue : null,
         longGoalValue === 1 ? balanceValue : budgetedValue,
       ),
-    [budgetedValue, goalValue, isGoalTemplatesEnabled, longGoalValue],
+    [
+      budgetedValue,
+      decimalPlaces,
+      goalValue,
+      isGoalTemplatesEnabled,
+      longGoalValue,
+    ],
   );
-  const format = useFormat();
 
   const getDifferenceToGoal = useCallback(
     (balanceValue: number) =>

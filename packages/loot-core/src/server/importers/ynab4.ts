@@ -4,6 +4,7 @@ import normalizePathSep from 'slash';
 import { v4 as uuidv4 } from 'uuid';
 
 import { logger } from '../../platform/server/log';
+import { getCurrency } from '../../shared/currencies';
 import * as monthUtils from '../../shared/months';
 import { amountToInteger, groupBy, sortByKey } from '../../shared/util';
 import { send } from '../main-app';
@@ -176,6 +177,10 @@ async function importTransactions(
   }
 
   const transactionsGrouped = groupBy(data.transactions, 'accountId');
+  // Always use the source budget currency precision; YNAB amounts are scaled to that precision.
+  const decimalPlaces = getCurrency(
+    data.budgetMetaData?.currencyISOSymbol || '',
+  ).decimalPlaces;
 
   await Promise.all(
     [...transactionsGrouped.keys()].map(async accountId => {
@@ -214,7 +219,7 @@ async function importTransactions(
 
           const newTransaction = {
             id,
-            amount: amountToInteger(transaction.amount),
+            amount: amountToInteger(transaction.amount, decimalPlaces),
             category: isOffBudget(entityIdMap.get(accountId))
               ? null
               : getCategory(transaction.categoryId),
@@ -233,7 +238,7 @@ async function importTransactions(
                 .map(t => {
                   return {
                     id: entityIdMap.get(t.entityId),
-                    amount: amountToInteger(t.amount),
+                    amount: amountToInteger(t.amount, decimalPlaces),
                     category: getCategory(t.categoryId),
                     notes: t.memo || null,
                     ...transferProperties(t),
@@ -290,6 +295,9 @@ async function importBudgets(
   entityIdMap: Map<string, string>,
 ) {
   const budgets = sortByKey(data.monthlyBudgets, 'month');
+  const decimalPlaces = getCurrency(
+    data.budgetMetaData?.currencyISOSymbol || '',
+  ).decimalPlaces;
 
   await send('api/batch-budget-start');
   try {
@@ -301,7 +309,7 @@ async function importBudgets(
 
       await Promise.all(
         filled.map(async catBudget => {
-          const amount = amountToInteger(catBudget.budgeted);
+          const amount = amountToInteger(catBudget.budgeted, decimalPlaces);
           const catId = entityIdMap.get(catBudget.categoryId);
           const month = monthUtils.monthFromDate(budget.month);
           if (!catId) {

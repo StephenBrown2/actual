@@ -244,6 +244,7 @@ export function reapplyThousandSeparators(amountText: string) {
 export function appendDecimals(
   amountText: string,
   hideDecimals = false,
+  decimalPlaces: number,
 ): string {
   const { decimalSeparator: separator } = getNumberFormat();
   let result = amountText;
@@ -253,10 +254,19 @@ export function appendDecimals(
   if (!hideDecimals) {
     result = result.replaceAll(/[,.]/g, '');
     result = result.replace(/^0+(?!$)/, '');
-    result = result.padStart(3, '0');
-    result = result.slice(0, -2) + separator + result.slice(-2);
+    result = result.padStart(decimalPlaces + 1, '0');
+    if (decimalPlaces > 0) {
+      result =
+        result.slice(0, -decimalPlaces) +
+        separator +
+        result.slice(-decimalPlaces);
+    }
   }
-  return amountToCurrency(currencyToAmount(result));
+  const amount = currencyToAmount(result) || 0;
+  const formatter = getNumberFormat({
+    decimalPlaces: hideDecimals ? 0 : decimalPlaces,
+  }).formatter;
+  return formatter.format(amount);
 }
 
 const NUMBER_FORMATS = [
@@ -438,34 +448,66 @@ export function safeNumber(value: number) {
   return value;
 }
 
-export function toRelaxedNumber(currencyAmount: CurrencyAmount): Amount {
-  return integerToAmount(currencyToInteger(currencyAmount) || 0);
+export function toRelaxedNumber(
+  currencyAmount: CurrencyAmount,
+  decimalPlaces: number,
+): Amount {
+  return integerToAmount(
+    currencyToInteger(currencyAmount, decimalPlaces) || 0,
+    decimalPlaces,
+  );
 }
 
 export function integerToCurrency(
   integerAmount: IntegerAmount,
-  formatter = getNumberFormat().formatter,
-  decimalPlaces: number = 2,
+  decimalPlaces: number,
+  formatter?: { format: (value: number) => string },
 ) {
   const divisor = Math.pow(10, decimalPlaces);
   const amount = safeNumber(integerAmount) / divisor;
-
-  return formatter.format(amount);
+  const displayDecimalPlaces = numberFormatConfig.hideFraction
+    ? 0
+    : decimalPlaces;
+  const effectiveFormatter =
+    formatter ??
+    getNumberFormat({
+      format: numberFormatConfig.format,
+      hideFraction: numberFormatConfig.hideFraction,
+      decimalPlaces: displayDecimalPlaces,
+    }).formatter;
+  return effectiveFormatter.format(amount);
 }
 
-export function integerToCurrencyWithDecimal(integerAmount: IntegerAmount) {
+export function integerToCurrencyWithDecimal(
+  integerAmount: IntegerAmount,
+  decimalPlaces: number,
+) {
+  const divisor = Math.pow(10, decimalPlaces);
   // If decimal digits exist, keep them. Otherwise format them as usual.
-  if (integerAmount % 100 !== 0) {
+  if (integerAmount % divisor !== 0) {
     return integerToCurrency(
       integerAmount,
+      decimalPlaces,
       getNumberFormat({
-        ...numberFormatConfig,
+        format: numberFormatConfig.format,
         hideFraction: false,
+        decimalPlaces,
       }).formatter,
     );
   }
 
-  return integerToCurrency(integerAmount);
+  const displayDecimalPlaces = numberFormatConfig.hideFraction
+    ? 0
+    : decimalPlaces;
+  return integerToCurrency(
+    integerAmount,
+    decimalPlaces,
+    getNumberFormat({
+      format: numberFormatConfig.format,
+      hideFraction: numberFormatConfig.hideFraction,
+      decimalPlaces: displayDecimalPlaces,
+    }).formatter,
+  );
 }
 
 export function amountToCurrency(amount: Amount): CurrencyAmount {
@@ -503,11 +545,54 @@ export function currencyToAmount(currencyAmount: string): Amount | null {
   return isNaN(amount) ? null : amount;
 }
 
+/**
+ * Returns the number of digits after the decimal separator in a currency string,
+ * using the same separator logic as currencyToAmount. Returns 0 if there is no
+ * fractional part.
+ */
+export function getFractionDigitCount(currencyAmount: string): number {
+  currencyAmount = currencyAmount.replace(/\u2212/g, '-');
+  const match = currencyAmount.match(/[,.](?=[^.,]*$)/);
+  if (
+    !match ||
+    (match[0] === getNumberFormat().thousandsSeparator &&
+      match.index + 4 <= currencyAmount.length)
+  ) {
+    return 0;
+  }
+  const fraction = currencyAmount.slice(match.index + 1);
+  return fraction.replace(/\D/g, '').length;
+}
+
 export function currencyToInteger(
   currencyAmount: CurrencyAmount,
+  decimalPlaces: number,
 ): IntegerAmount | null {
   const amount = currencyToAmount(currencyAmount);
-  return amount == null ? null : amountToInteger(amount);
+  return amount == null ? null : amountToInteger(amount, decimalPlaces);
+}
+
+/**
+ * Parse a currency string, round to the given decimal places, and format it.
+ * Use when reformatting user input (e.g. in formatters) with per-currency precision.
+ */
+export function formatCurrencyInput(
+  value: string | null | undefined,
+  decimalPlaces: number,
+): string {
+  if (value == null || value === '') return '';
+  const amount = currencyToAmount(value);
+  return amount == null
+    ? ''
+    : integerToCurrency(
+        amountToInteger(amount, decimalPlaces),
+        decimalPlaces,
+        getNumberFormat({
+          format: numberFormatConfig.format,
+          hideFraction: false,
+          decimalPlaces,
+        }).formatter,
+      );
 }
 
 export function stringToInteger(str: string): number | null {
@@ -522,7 +607,7 @@ export function stringToInteger(str: string): number | null {
 
 export function amountToInteger(
   amount: Amount,
-  decimalPlaces: number = 2,
+  decimalPlaces: number,
 ): IntegerAmount {
   const multiplier = Math.pow(10, decimalPlaces);
   return Math.round(amount * multiplier);
@@ -530,7 +615,7 @@ export function amountToInteger(
 
 export function integerToAmount(
   integerAmount: IntegerAmount,
-  decimalPlaces: number = 2,
+  decimalPlaces: number,
 ): Amount {
   const divisor = Math.pow(10, decimalPlaces);
   return integerAmount / divisor;
