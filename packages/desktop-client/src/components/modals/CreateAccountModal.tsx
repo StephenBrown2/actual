@@ -89,23 +89,14 @@ export function CreateAccountModal({
         throw new Error(results.reason);
       }
 
-      const newAccounts = [];
-
-      type NormalizedAccount = {
-        account_id: string;
-        name: string;
-        institution: string;
-        orgDomain: string;
-        orgId: string;
-        balance: number;
-      };
+      const newAccounts: BaseNormalizedAccount[] = [];
 
       for (const oldAccount of results.accounts ?? []) {
-        const newAccount: NormalizedAccount = {
+        const newAccount: BaseNormalizedAccount = {
           account_id: oldAccount.id,
           name: oldAccount.name,
           institution: oldAccount.org.name,
-          orgDomain: oldAccount.org.domain,
+          orgDomain: oldAccount.org.domain ?? '',
           orgId: oldAccount.org.id,
           balance: oldAccount.balance,
         };
@@ -155,29 +146,21 @@ export function CreateAccountModal({
         throw new Error(results.error);
       }
 
-      const newAccounts = [];
-
-      type NormalizedAccount = {
-        account_id: string;
-        name: string;
-        institution: string;
-        orgDomain: string | null;
-        orgId: string;
-        balance: number;
-      };
+      const newAccounts: NormalizedAccountWithSubtype[] = [];
 
       for (const oldAccount of results.accounts) {
-        const newAccount: NormalizedAccount = {
+        const newAccount: NormalizedAccountWithSubtype = {
           account_id: oldAccount.id,
           name: `${oldAccount.name.trim()} - ${oldAccount.type === 'BANK' ? oldAccount.taxNumber : oldAccount.owner}`,
           institution: oldAccount.name,
-          orgDomain: null,
+          orgDomain: '',
           orgId: oldAccount.id,
           balance:
             oldAccount.type === 'BANK'
               ? oldAccount.bankData.automaticallyInvestedBalance +
                 oldAccount.bankData.closingBalance
               : oldAccount.balance,
+          subtype: oldAccount.subtype,
         };
 
         newAccounts.push(newAccount);
@@ -196,14 +179,16 @@ export function CreateAccountModal({
       );
     } catch (err) {
       console.error(err);
-      addNotification({
-        notification: {
-          type: 'error',
-          title: t('Error when trying to contact Pluggy.ai'),
-          message: (err as Error).message,
-          timeout: 5000,
-        },
-      });
+      dispatch(
+        addNotification({
+          notification: {
+            type: 'error',
+            title: t('Error when trying to contact Pluggy.ai'),
+            message: (err as Error).message,
+            timeout: 5000,
+          },
+        }),
+      );
       dispatch(
         pushModal({
           modal: {
@@ -631,3 +616,16 @@ export function CreateAccountModal({
     </Modal>
   );
 }
+
+type BaseNormalizedAccount = {
+  account_id: string;
+  name: string;
+  institution: string;
+  orgDomain: string;
+  orgId: string;
+  balance: number;
+};
+
+type NormalizedAccountWithSubtype = BaseNormalizedAccount & {
+  subtype?: string | null;
+};

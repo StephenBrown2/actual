@@ -11,7 +11,11 @@ export class MobileAccountsPage {
     this.page = page;
 
     this.accountList = this.page.getByLabel('Account list');
-    this.accountListItems = this.accountList.getByTestId('account-list-item');
+    this.accountListItems = this.accountList
+      .getByTestId('account-list-item')
+      .filter({
+        has: this.page.getByTestId('account-name'),
+      });
   }
 
   async waitFor(...options: Parameters<Locator['waitFor']>) {

@@ -47,6 +47,7 @@ export const theme = {
   sidebarItemText: 'var(--color-sidebarItemText)',
   sidebarItemTextSelected: 'var(--color-sidebarItemTextSelected)',
   sidebarBudgetName: 'var(--color-sidebarBudgetName)',
+  sidebarSubgroupHeaderText: 'var(--color-sidebarSubgroupHeaderText)',
   menuBackground: 'var(--color-menuBackground)',
   menuItemBackground: 'var(--color-menuItemBackground)',
   menuItemBackgroundHover: 'var(--color-menuItemBackgroundHover)',

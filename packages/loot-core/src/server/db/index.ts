@@ -26,6 +26,7 @@ import {
 } from '../aql';
 import {
   accountModel,
+  accountSubgroupModel,
   categoryGroupModel,
   categoryModel,
   payeeModel,
@@ -41,6 +42,7 @@ import {
 } from './sort';
 import type {
   DbAccount,
+  DbAccountSubgroup,
   DbBank,
   DbCategory,
   DbCategoryGroup,
@@ -718,13 +720,58 @@ export function getAccounts() {
     DbAccount & {
       bankName: DbBank['name'];
       bankId: DbBank['id'];
+      subgroup_sort_order: DbAccountSubgroup['sort_order'] | null;
     }
   >(
-    `SELECT a.*, b.name as bankName, b.id as bankId FROM accounts a
+    `SELECT a.*, asg.name as subgroup, asg.sort_order as subgroup_sort_order, b.name as bankName, b.id as bankId FROM accounts a
+       LEFT JOIN account_subgroups asg ON a.subgroup = asg.id AND asg.tombstone = 0
        LEFT JOIN banks b ON a.bank = b.id
        WHERE a.tombstone = 0
-       ORDER BY sort_order, name`,
+       ORDER BY a.offbudget, asg.sort_order, a.sort_order, a.name`,
   );
+}
+
+export async function getOrCreateAccountSubgroup(
+  subgroupName: string,
+): Promise<DbAccountSubgroup['id']> {
+  const trimmed = subgroupName.trim();
+  if (!trimmed) {
+    throw new Error('Account subgroup name is required');
+  }
+
+  const existingSubgroup = await first<Pick<DbAccountSubgroup, 'id'>>(
+    `
+      SELECT id
+      FROM account_subgroups
+      WHERE UPPER(name) = ? AND tombstone = 0
+      LIMIT 1
+    `,
+    [trimmed.toUpperCase()],
+  );
+  if (existingSubgroup) {
+    return existingSubgroup.id;
+  }
+
+  const lastSubgroup = await first<Pick<DbAccountSubgroup, 'sort_order'>>(
+    `
+      SELECT sort_order
+      FROM account_subgroups
+      WHERE tombstone = 0
+      ORDER BY sort_order DESC, id DESC
+      LIMIT 1
+    `,
+  );
+  const sort_order =
+    (lastSubgroup ? lastSubgroup.sort_order : 0) + SORT_INCREMENT;
+
+  const subgroup = {
+    ...accountSubgroupModel.validate({
+      name: trimmed,
+    }),
+    sort_order,
+  };
+
+  return insertWithUUID('account_subgroups', subgroup);
 }
 
 export async function insertAccount(account) {
@@ -775,6 +822,26 @@ export async function moveAccount(
       void update('accounts', info);
     }
     void update('accounts', { id, sort_order });
+  });
+}
+
+export async function moveAccountSubgroup(
+  id: DbAccountSubgroup['id'],
+  targetId: DbAccountSubgroup['id'] | null,
+) {
+  const subgroups = await all<Pick<DbAccountSubgroup, 'id' | 'sort_order'>>(
+    `SELECT id, sort_order
+     FROM account_subgroups
+     WHERE tombstone = 0
+     ORDER BY sort_order, id`,
+  );
+
+  const { updates, sort_order } = shoveSortOrders(subgroups, targetId);
+  await batchMessages(async () => {
+    for (const info of updates) {
+      void update('account_subgroups', info);
+    }
+    void update('account_subgroups', { id, sort_order });
   });
 }
 
