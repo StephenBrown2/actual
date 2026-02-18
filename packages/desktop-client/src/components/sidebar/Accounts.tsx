@@ -272,7 +272,9 @@ export function Accounts() {
     [allSubgroupKeys, setSavedExpandedKeys],
   );
 
-  const onExpandedChange = useCallback(persistExpandedKeys, [persistExpandedKeys]);
+  const onExpandedChange = useCallback(persistExpandedKeys, [
+    persistExpandedKeys,
+  ]);
 
   useEffect(() => {
     if (!savedExpandedKeys) {
