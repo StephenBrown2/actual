@@ -101,6 +101,7 @@ function AccountSubgroupList({
   renderItem = defaultRenderItem,
 }: AccountSubgroupListProps) {
   const { t } = useTranslation();
+  const listMaxHeight = maxHeight ?? (!embedded ? 175 : undefined);
 
   const { newItem, usedSubgroups, otherSubgroups } = useMemo(() => {
     let currentIndex = 0;
@@ -143,8 +144,7 @@ function AccountSubgroupList({
         style={{
           overflow: 'auto',
           padding: '5px 0',
-          ...(maxHeight ? { maxHeight } : {}),
-          ...(!maxHeight && !embedded ? { maxHeight: 175 } : {}),
+          ...(listMaxHeight ? { maxHeight: listMaxHeight } : {}),
         }}
       >
         {newItem &&
@@ -222,7 +222,7 @@ export function AccountSubgroupAutocomplete({
   const { data: accounts = [] } = useAccounts();
 
   const [rawInput, setRawInput] = useState('');
-  const hasInput = !!rawInput;
+  const hasInput = rawInput.length > 0;
 
   const { usedOnBudgetSubgroups, usedOffBudgetSubgroups } = useMemo(() => {
     const onBudget = new Set<string>();
@@ -314,7 +314,7 @@ export function AccountSubgroupAutocomplete({
 
     return [
       {
-        id: 'new',
+        id: NEW_ITEM_ID,
         name: '',
         group: 'other' as const,
       } satisfies AccountSubgroupItem,
@@ -378,9 +378,7 @@ export function AccountSubgroupAutocomplete({
       inputProps={{
         ...inputProps,
         autoCapitalize: 'words',
-        onBlur: () => {
-          setRawInput('');
-        },
+        onBlur: () => setRawInput(''),
         'aria-label': t('Account Subgroup'),
         onChangeValue: setRawInput,
       }}

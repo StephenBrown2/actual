@@ -1,4 +1,4 @@
-import React, { forwardRef, useCallback, useMemo, useRef } from 'react';
+import { forwardRef, useCallback, useMemo, useRef } from 'react';
 import type { ComponentPropsWithoutRef, CSSProperties } from 'react';
 import type { DragItem } from 'react-aria';
 import {
@@ -70,12 +70,13 @@ function AccountHeader<SheetFieldName extends SheetFields<'account'>>({
   const navigate = useNavigate();
 
   const Cheveron = showCheveronDown ? SvgCheveronDown : SvgCheveronRight;
+  const onPressAccountHeader = onPress ?? (() => navigate(`/accounts/${id}`));
 
   return (
     <Button
       variant="bare"
       aria-label={t('View {{name}} transactions', { name })}
-      onPress={onPress ? onPress : () => navigate(`/accounts/${id}`)}
+      onPress={onPressAccountHeader}
       style={{
         height: ROW_HEIGHT,
         width: '100%',
@@ -153,6 +154,13 @@ function AccountListItem({
     return null;
   }
 
+  let accountStatusColor = theme.sidebarItemBackgroundPositive;
+  if (isPending) {
+    accountStatusColor = theme.sidebarItemBackgroundPending;
+  } else if (isFailed) {
+    accountStatusColor = theme.sidebarItemBackgroundFailed;
+  }
+
   return (
     <ListBoxItem
       textValue={account.name}
@@ -188,11 +196,7 @@ function AccountListItem({
             {account.bankId ? (
               <View
                 style={{
-                  backgroundColor: isPending
-                    ? theme.sidebarItemBackgroundPending
-                    : isFailed
-                      ? theme.sidebarItemBackgroundFailed
-                      : theme.sidebarItemBackgroundPositive,
+                  backgroundColor: accountStatusColor,
                   marginRight: '8px',
                   width: 8,
                   flexShrink: 0,
@@ -376,7 +380,7 @@ function AllAccountList({
               getAccountBalance={getAccountBalance}
               onOpenAccount={onOpenAccount}
               ref={el => {
-                if (el) closedAccountsRef.current = el;
+                closedAccountsRef.current = el;
               }}
             />
           )}

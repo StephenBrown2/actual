@@ -26,7 +26,7 @@ import {
   useMoveAccountSubgroupMutation,
   useUpdateAccountMutation,
 } from '@desktop-client/accounts';
-import { groupAccountsBySubgroup as groupAccountsBySubgroupData } from '@desktop-client/accounts/accountSubgroups';
+import { groupAccountsBySubgroup } from '@desktop-client/accounts/accountSubgroups';
 import { useAccounts } from '@desktop-client/hooks/useAccounts';
 import { useClosedAccounts } from '@desktop-client/hooks/useClosedAccounts';
 import { useFailedAccounts } from '@desktop-client/hooks/useFailedAccounts';
@@ -123,7 +123,7 @@ function buildSubgroupTreeNodes(
   budgetPrefix: string,
 ): TreeNode[] {
   const { ungroupedAccounts, subgroupEntries } =
-    groupAccountsBySubgroupData(accounts);
+    groupAccountsBySubgroup(accounts);
   const isOffBudget = budgetPrefix === OFF_BUDGET_KEY;
   const subgroupNodes: TreeNode[] = subgroupEntries.map(
     ([subgroupName, groupedAccounts]) => ({
@@ -147,6 +147,10 @@ function buildSubgroupTreeNodes(
     })),
     ...subgroupNodes,
   ];
+}
+
+function getAccountIds(nodes: TreeNode[] | undefined): string[] {
+  return nodes?.filter(node => !!node.account).map(node => node.id) ?? [];
 }
 
 export function Accounts() {
@@ -268,12 +272,7 @@ export function Accounts() {
     [allSubgroupKeys, setSavedExpandedKeys],
   );
 
-  const onExpandedChange = useCallback(
-    (keys: Set<Key>) => {
-      persistExpandedKeys(keys);
-    },
-    [persistExpandedKeys],
-  );
+  const onExpandedChange = useCallback(persistExpandedKeys, [persistExpandedKeys]);
 
   useEffect(() => {
     if (!savedExpandedKeys) {
@@ -311,10 +310,7 @@ export function Accounts() {
 
   function findSubgroupForKey(key: Key): string | null {
     const keyStr = String(key);
-    if (isSubgroupKey(keyStr)) {
-      return getSubgroupNameFromKey(keyStr);
-    }
-    return null;
+    return isSubgroupKey(keyStr) ? getSubgroupNameFromKey(keyStr) : null;
   }
 
   const getSubgroupKeysForPrefix = useCallback(
@@ -333,9 +329,7 @@ export function Accounts() {
       for (const group of rootChildren) {
         const groupChildren = group.children ?? [];
 
-        const untypedGroupIds = groupChildren
-          .filter(node => !!node.account)
-          .map(node => node.id);
+        const untypedGroupIds = getAccountIds(groupChildren);
         if (untypedGroupIds.includes(targetAccountId)) {
           return untypedGroupIds;
         }
@@ -344,10 +338,7 @@ export function Accounts() {
           if (!node.isSubgroup) {
             continue;
           }
-          const typedGroupIds =
-            node.children
-              ?.filter(child => !!child.account)
-              .map(child => child.id) ?? [];
+          const typedGroupIds = getAccountIds(node.children);
           if (typedGroupIds.includes(targetAccountId)) {
             return typedGroupIds;
           }
