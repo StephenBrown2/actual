@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { logger } from '#platform/server/log';
 import { send } from '#server/main-app';
 import * as monthUtils from '#shared/months';
+import { normalizeToTitleCase } from '#shared/normalisation';
 import { amountToInteger, groupBy, sortByKey } from '#shared/util';
 
 import type * as YNAB4 from './ynab4-types';
@@ -23,6 +24,7 @@ async function importAccounts(
         const id = await send('api/account-create', {
           account: {
             name: account.accountName,
+            subgroup: normalizeToTitleCase(account.accountType) ?? undefined,
             offbudget: account.onBudget ? false : true,
             closed: account.hidden ? true : false,
           },

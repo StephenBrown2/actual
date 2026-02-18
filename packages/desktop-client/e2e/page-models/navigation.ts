@@ -10,6 +10,7 @@ import { SettingsPage } from './settings-page';
 
 type AccountEntry = {
   name: string;
+  subgroup?: string;
   balance: number;
   offBudget: boolean;
 };
@@ -156,6 +157,17 @@ export class Navigation {
       .waitFor({ state: 'visible' });
 
     await fillReactInput(this.page.getByLabel('Name'), data.name);
+
+    if (data.subgroup) {
+      await fillReactInput(
+        this.page.getByLabel('Account Subgroup'),
+        data.subgroup,
+      );
+      await this.page
+        .getByTestId(`${data.subgroup}-account-subgroup-item`)
+        .click();
+    }
+
     await fillReactInput(this.page.getByLabel('Balance'), String(data.balance));
 
     if (data.offBudget) {
