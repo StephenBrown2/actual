@@ -15,6 +15,7 @@ import { View } from '@actual-app/components/view';
 import { toRelaxedNumber } from '@actual-app/core/shared/util';
 
 import { useCreateAccountMutation } from '#accounts';
+import { AccountSubgroupAutocomplete } from '#components/autocomplete/AccountSubgroupAutocomplete';
 import { Link } from '#components/common/Link';
 import {
   Modal,
@@ -38,6 +39,7 @@ export function CreateLocalAccountModal() {
   const isUsingServer = useSyncServerStatus() !== 'no-server';
   const { data: accounts = [] } = useAccounts();
   const [name, setName] = useState('');
+  const [subgroup, setSubgroup] = useState('');
   const [offbudget, setOffbudget] = useState(false);
   const [balance, setBalance] = useState('0');
 
@@ -70,6 +72,7 @@ export function CreateLocalAccountModal() {
       createAccount.mutate(
         {
           name,
+          subgroup: subgroup || undefined,
           balance: toRelaxedNumber(balance),
           offBudget: offbudget,
         },
@@ -140,6 +143,35 @@ export function CreateLocalAccountModal() {
                   {nameError}
                 </FormError>
               )}
+
+              <InlineField label={t('Subgroup')} width="100%">
+                <View
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    flex: 1,
+                    minWidth: 0,
+                  }}
+                >
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <AccountSubgroupAutocomplete
+                      value={subgroup}
+                      onSelect={(id, value) => setSubgroup(id || value)}
+                    />
+                  </View>
+                  <Text
+                    style={{
+                      color: theme.pageTextLight,
+                      fontSize: 11,
+                      marginLeft: 8,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <Trans>Optional</Trans>
+                  </Text>
+                </View>
+              </InlineField>
 
               <View
                 style={{

@@ -5,6 +5,7 @@ import { logger } from '#platform/server/log';
 import { send } from '#server/main-app';
 import { ruleModel } from '#server/transactions/transaction-rules';
 import * as monthUtils from '#shared/months';
+import { normalizeToTitleCase } from '#shared/normalisation';
 import { q } from '#shared/query';
 import { groupBy, sortByKey } from '#shared/util';
 import type { RecurConfig, RecurPattern, RuleEntity } from '#types/models';
@@ -274,6 +275,7 @@ function importAccounts(data: Budget, entityIdMap: Map<string, string>) {
         const id = await send('api/account-create', {
           account: {
             name: account.name,
+            subgroup: normalizeToTitleCase(account.type) ?? undefined,
             offbudget: account.on_budget ? false : true,
             closed: account.closed,
           },

@@ -11,6 +11,7 @@ import {
 } from '@actual-app/components/icons/v2';
 import { InitialFocus } from '@actual-app/components/initial-focus';
 import { Input } from '@actual-app/components/input';
+import { Popover } from '@actual-app/components/popover';
 import { SpaceBetween } from '@actual-app/components/space-between';
 import { styles } from '@actual-app/components/styles';
 import { Text } from '@actual-app/components/text';
@@ -22,6 +23,7 @@ import { css, cx } from '@emotion/css';
 
 import { useReopenAccountMutation, useUpdateAccountMutation } from '#accounts';
 import { BalanceHistoryGraph } from '#components/accounts/BalanceHistoryGraph';
+import { AccountSubgroupAutocomplete } from '#components/autocomplete/AccountSubgroupAutocomplete';
 import { Link } from '#components/common/Link';
 import { Notes } from '#components/Notes';
 import { DropHighlight, useDraggable, useDroppable } from '#components/sort';
@@ -117,6 +119,7 @@ export function Account<FieldName extends SheetFields<'account'>>({
   const dispatch = useDispatch();
 
   const [isEditing, setIsEditing] = useState(false);
+  const [groupMenuOpen, setGroupMenuOpen] = useState(false);
 
   const accountNote = useNotes(`account-${account?.id}`);
   const isTouchDevice =
@@ -142,6 +145,11 @@ export function Account<FieldName extends SheetFields<'account'>>({
         name: 'account-rename',
         text: t('Rename'),
         onClick: () => setIsEditing(true),
+      },
+      {
+        name: 'account-subgroup',
+        text: t('Subgroup'),
+        onClick: () => setGroupMenuOpen(true),
       },
       account?.closed
         ? {
@@ -269,6 +277,34 @@ export function Account<FieldName extends SheetFields<'account'>>({
             />
           </Link>
         </View>
+        {account && (
+          <Popover
+            triggerRef={triggerRef}
+            placement="bottom start"
+            isOpen={groupMenuOpen}
+            onOpenChange={() => setGroupMenuOpen(false)}
+            style={{ width: 175, margin: 1 }}
+            isNonModal
+          >
+            <View style={{ padding: '6px 8px' }}>
+              <AccountSubgroupAutocomplete
+                value={account.subgroup || ''}
+                embedded
+                maxHeight={150}
+                closeOnBlur={false}
+                onSelect={(id, _value) => {
+                  updateAccount.mutate({
+                    account: {
+                      ...account,
+                      subgroup: id || null,
+                    },
+                  });
+                  setGroupMenuOpen(false);
+                }}
+              />
+            </View>
+          </Popover>
+        )}
       </View>
     </View>
   );
@@ -348,7 +384,7 @@ export function Account<FieldName extends SheetFields<'account'>>({
       triggerProps={{
         delay: 1000,
         closeDelay: 250,
-        isDisabled: isContextMenuOpen,
+        isDisabled: isContextMenuOpen || groupMenuOpen,
       }}
     >
       {accountRow}

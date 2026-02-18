@@ -57,6 +57,7 @@ const dispatchErrorNotification = (
 
 type CreateAccountPayload = {
   name: string;
+  subgroup?: string;
   balance: number;
   offBudget: boolean;
 };
@@ -67,9 +68,15 @@ export function useCreateAccountMutation() {
   const { t } = useTranslation();
 
   return useMutation({
-    mutationFn: async ({ name, balance, offBudget }: CreateAccountPayload) => {
+    mutationFn: async ({
+      name,
+      subgroup,
+      balance,
+      offBudget,
+    }: CreateAccountPayload) => {
       const id = await send('account-create', {
         name,
+        subgroup,
         balance,
         offBudget,
       });
@@ -199,6 +206,35 @@ export function useMoveAccountMutation() {
       dispatchErrorNotification(
         dispatch,
         t('There was an error moving the account. Please try again.'),
+        error,
+      );
+    },
+  });
+}
+
+type MoveAccountSubgroupPayload = {
+  subgroup: string;
+  targetSubgroup: string | null;
+};
+
+export function useMoveAccountSubgroupMutation() {
+  const queryClient = useQueryClient();
+  const dispatch = useDispatch();
+  const { t } = useTranslation();
+
+  return useMutation({
+    mutationFn: async ({
+      subgroup,
+      targetSubgroup,
+    }: MoveAccountSubgroupPayload) => {
+      await send('account-subgroup-move', { subgroup, targetSubgroup });
+    },
+    onSuccess: () => invalidateQueries(queryClient),
+    onError: error => {
+      console.error('Error moving account subgroup:', error);
+      dispatchErrorNotification(
+        dispatch,
+        t('There was an error moving the account subgroup. Please try again.'),
         error,
       );
     },

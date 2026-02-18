@@ -68,6 +68,7 @@ export const schema = {
   accounts: {
     id: f('id'),
     name: f('string', { required: true }),
+    subgroup: f('id', { ref: 'account_subgroups' }),
     offbudget: f('boolean'),
     closed: f('boolean'),
     sort_order: f('float'),
@@ -78,6 +79,12 @@ export const schema = {
     last_reconciled: f('string'),
     last_sync: f('string'),
     bank_sync_status: f('string'),
+  },
+  account_subgroups: {
+    id: f('id'),
+    name: f('string'),
+    sort_order: f('float'),
+    tombstone: f('boolean'),
   },
   categories: {
     id: f('id'),

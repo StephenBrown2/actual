@@ -12,6 +12,7 @@ export type DbAccount = {
   closed: 1 | 0;
   tombstone: 1 | 0;
   sort_order: number;
+  subgroup?: DbAccountSubgroup['id'] | null;
   account_id?: string | null;
   balance_current?: number | null;
   balance_available?: number | null;
@@ -35,6 +36,13 @@ export type DbAccount = {
     | 'timed-out'
     | 'account-missing'
     | null;
+};
+
+export type DbAccountSubgroup = {
+  id: string;
+  name: string;
+  sort_order: number;
+  tombstone: 1 | 0;
 };
 
 export type DbBank = {
