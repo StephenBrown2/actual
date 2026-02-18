@@ -8,6 +8,7 @@ import { logger } from '../../platform/server/log';
 import { isNonProductionEnvironment } from '../../shared/environment';
 import { dayFromDate } from '../../shared/months';
 import * as monthUtils from '../../shared/months';
+import { normalizeToTitleCase } from '../../shared/normalisation';
 import { amountToInteger } from '../../shared/util';
 import type {
   AccountEntity,
@@ -58,6 +59,7 @@ export type AccountHandlers = {
   'account-close': typeof closeAccount;
   'account-reopen': typeof reopenAccount;
   'account-move': typeof moveAccount;
+  'account-subgroup-move': typeof moveAccountSubgroup;
   'secret-set': typeof setSecret;
   'secret-check': typeof checkSecret;
   'gocardless-poll-web-token': typeof pollGoCardlessWebToken;
@@ -78,15 +80,23 @@ export type AccountHandlers = {
 async function updateAccount({
   id,
   name,
+  subgroup,
   last_reconciled,
-}: Pick<AccountEntity, 'id' | 'name'> &
-  Partial<Pick<AccountEntity, 'last_reconciled'>>) {
+}: Pick<AccountEntity, 'id'> &
+  Partial<Pick<AccountEntity, 'name' | 'last_reconciled' | 'subgroup'>>) {
+  const accountSubgroupId =
+    subgroup === undefined
+      ? undefined
+      : subgroup?.trim()
+        ? await db.getOrCreateAccountSubgroup(subgroup)
+        : null;
+
   await db.update('accounts', {
     id,
-    name,
+    ...(name !== undefined && { name }),
     ...(last_reconciled && { last_reconciled }),
+    ...(subgroup !== undefined && { subgroup: accountSubgroupId }),
   });
-  return {};
 }
 
 async function getAccounts(): Promise<AccountEntity[]> {
@@ -96,6 +106,8 @@ async function getAccounts(): Promise<AccountEntity[]> {
       ({
         id: dbAccount.id,
         name: dbAccount.name,
+        subgroup: dbAccount.subgroup ?? null,
+        subgroup_sort_order: dbAccount.subgroup_sort_order ?? null,
         offbudget: dbAccount.offbudget,
         closed: dbAccount.closed,
         sort_order: dbAccount.sort_order,
@@ -223,7 +235,6 @@ async function linkSimpleFinAccount({
   externalAccount: SyncServerSimpleFinAccount;
 }) {
   let id;
-
   const institution = {
     name: externalAccount.institution ?? t('Unknown'),
   };
@@ -295,6 +306,7 @@ async function linkPluggyAiAccount({
   externalAccount: SyncServerPluggyAiAccount;
 }) {
   let id;
+  const normalizedSubgroup = normalizeToTitleCase(externalAccount.subtype);
 
   const institution = {
     name: externalAccount.institution ?? t('Unknown'),
@@ -315,14 +327,25 @@ async function linkPluggyAiAccount({
       throw new Error(`Account with ID ${upgradingId} not found.`);
     }
 
+    const shouldSetSubgroup =
+      normalizedSubgroup != null && !accRow.subgroup?.trim();
+    const accountSubgroupId = shouldSetSubgroup
+      ? await db.getOrCreateAccountSubgroup(normalizedSubgroup)
+      : undefined;
+
     id = accRow.id;
     await db.update('accounts', {
       id,
       account_id: externalAccount.account_id,
       bank: bank.id,
       account_sync_source: 'pluggyai',
+      ...(accountSubgroupId ? { subgroup: accountSubgroupId } : {}),
     });
   } else {
+    const accountSubgroupId = normalizedSubgroup
+      ? await db.getOrCreateAccountSubgroup(normalizedSubgroup)
+      : null;
+
     id = uuidv4();
     await db.insertWithUUID('accounts', {
       id,
@@ -331,6 +354,7 @@ async function linkPluggyAiAccount({
       official_name: externalAccount.name,
       bank: bank.id,
       offbudget: offBudget ? 1 : 0,
+      subgroup: accountSubgroupId,
       account_sync_source: 'pluggyai',
     });
     await db.insertPayee({
@@ -359,17 +383,25 @@ async function linkPluggyAiAccount({
 
 async function createAccount({
   name,
+  subgroup,
   balance = 0,
   offBudget = false,
   closed = false,
 }: {
   name: string;
+  subgroup?: string | undefined;
   balance?: number | undefined;
   offBudget?: boolean | undefined;
   closed?: boolean | undefined;
 }) {
+  let accountSubgroupId: string | null = null;
+  if (subgroup?.trim()) {
+    accountSubgroupId = await db.getOrCreateAccountSubgroup(subgroup);
+  }
+
   const id: AccountEntity['id'] = await db.insertAccount({
     name,
+    subgroup: accountSubgroupId,
     offbudget: offBudget ? 1 : 0,
     closed: closed ? 1 : 0,
   });
@@ -520,6 +552,47 @@ async function moveAccount({
   targetId: AccountEntity['id'] | null;
 }) {
   await db.moveAccount(id, targetId);
+}
+
+async function moveAccountSubgroup({
+  subgroup,
+  targetSubgroup,
+}: {
+  subgroup: string;
+  targetSubgroup: string | null;
+}) {
+  const subgroupRow = await db.first<Pick<db.DbAccountSubgroup, 'id'>>(
+    `
+      SELECT id
+      FROM account_subgroups
+      WHERE tombstone = 0 AND name = ?
+      LIMIT 1
+    `,
+    [subgroup],
+  );
+
+  if (!subgroupRow) {
+    throw APIError(`Subgroup '${subgroup}' was not found`);
+  }
+
+  let targetSubgroupId: db.DbAccountSubgroup['id'] | null = null;
+  if (targetSubgroup) {
+    const targetRow = await db.first<Pick<db.DbAccountSubgroup, 'id'>>(
+      `
+        SELECT id
+        FROM account_subgroups
+        WHERE tombstone = 0 AND name = ?
+        LIMIT 1
+      `,
+      [targetSubgroup],
+    );
+    if (!targetRow) {
+      throw APIError(`Target subgroup '${targetSubgroup}' was not found`);
+    }
+    targetSubgroupId = targetRow.id;
+  }
+
+  await db.moveAccountSubgroup(subgroupRow.id, targetSubgroupId);
 }
 
 async function setSecret({
@@ -1270,6 +1343,7 @@ app.method('account-create', mutator(undoable(createAccount)));
 app.method('account-close', mutator(closeAccount));
 app.method('account-reopen', mutator(undoable(reopenAccount)));
 app.method('account-move', mutator(undoable(moveAccount)));
+app.method('account-subgroup-move', mutator(undoable(moveAccountSubgroup)));
 app.method('secret-set', setSecret);
 app.method('secret-check', checkSecret);
 app.method('gocardless-poll-web-token', pollGoCardlessWebToken);

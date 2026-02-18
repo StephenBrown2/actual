@@ -10,6 +10,7 @@ import { SettingsPage } from './settings-page';
 
 type AccountEntry = {
   name: string;
+  subgroup?: string;
   balance: number;
   offBudget: boolean;
 };
@@ -101,6 +102,14 @@ export class Navigation {
 
     // Fill the form
     await this.page.getByLabel('Name:').fill(data.name);
+
+    if (data.subgroup) {
+      await this.page.getByLabel('Account Subgroup').fill(data.subgroup);
+      await this.page
+        .getByTestId(`${data.subgroup}-account-subgroup-item`)
+        .click();
+    }
+
     await this.page.getByLabel('Balance:').fill(String(data.balance));
 
     if (data.offBudget) {

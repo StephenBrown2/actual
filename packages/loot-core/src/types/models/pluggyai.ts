@@ -16,4 +16,5 @@ export type SyncServerPluggyAiAccount = {
   orgDomain?: string | null;
   orgId?: string;
   name: string;
+  subtype?: string | null;
 };

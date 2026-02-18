@@ -11,6 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { logger } from '../../platform/server/log';
 import * as monthUtils from '../../shared/months';
+import { normalizeToTitleCase } from '../../shared/normalisation';
 import { amountToInteger, groupBy, sortByKey } from '../../shared/util';
 
 import type * as YNAB4 from './ynab4-types';
@@ -28,6 +29,7 @@ async function importAccounts(
       if (!account.isTombstone) {
         const id = await actual.createAccount({
           name: account.accountName,
+          subgroup: normalizeToTitleCase(account.accountType) ?? undefined,
           offbudget: account.onBudget ? false : true,
           closed: account.hidden ? true : false,
         });
