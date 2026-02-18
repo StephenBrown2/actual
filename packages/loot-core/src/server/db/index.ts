@@ -719,7 +719,7 @@ export function getAccounts() {
     }
   >(
     `SELECT a.*, asg.name as subgroup, asg.sort_order as subgroup_sort_order, b.name as bankName, b.id as bankId FROM accounts a
-       LEFT JOIN account_subgroups asg ON a.subgroup = asg.id
+       LEFT JOIN account_subgroups asg ON a.subgroup = asg.id AND asg.tombstone = 0
        LEFT JOIN banks b ON a.bank = b.id
        WHERE a.tombstone = 0
        ORDER BY a.offbudget, asg.sort_order, a.sort_order, a.name`,
@@ -738,10 +738,10 @@ export async function getOrCreateAccountSubgroup(
     `
       SELECT id
       FROM account_subgroups
-      WHERE name = ?
+      WHERE UPPER(name) = ? AND tombstone = 0
       LIMIT 1
     `,
-    [trimmed],
+    [trimmed.toUpperCase()],
   );
   if (existingSubgroup) {
     return existingSubgroup.id;
@@ -751,6 +751,7 @@ export async function getOrCreateAccountSubgroup(
     `
       SELECT sort_order
       FROM account_subgroups
+      WHERE tombstone = 0
       ORDER BY sort_order DESC, id DESC
       LIMIT 1
     `,
@@ -833,9 +834,9 @@ export async function moveAccountSubgroup(
   const { updates, sort_order } = shoveSortOrders(subgroups, targetId);
   await batchMessages(async () => {
     for (const info of updates) {
-      update('account_subgroups', info);
+      void update('account_subgroups', info);
     }
-    update('account_subgroups', { id, sort_order });
+    void update('account_subgroups', { id, sort_order });
   });
 }
 

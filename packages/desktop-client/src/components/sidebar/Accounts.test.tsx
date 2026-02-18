@@ -77,7 +77,7 @@ const offBudgetAccountsMock = [
 const accountsMock = [...onBudgetAccountsMock, ...offBudgetAccountsMock];
 
 vi.mock('@desktop-client/hooks/useAccounts', () => ({
-  useAccounts: () => accountsMock,
+  useAccounts: () => ({ data: accountsMock }),
 }));
 vi.mock('@desktop-client/hooks/useOnBudgetAccounts', () => ({
   useOnBudgetAccounts: () => onBudgetAccountsMock,
@@ -145,15 +145,17 @@ vi.mock('@desktop-client/spreadsheet/bindings', () => ({
 
 function getGroupToggleButton(label: string): HTMLButtonElement {
   const groupLabel = screen.getByText(label);
-  const container =
-    groupLabel.closest('[role="row"]') ?? groupLabel.parentElement;
-  const button = container?.querySelector(
-    'button[aria-label="Collapse"], button[aria-label="Expand"]',
-  );
-  if (!(button instanceof HTMLButtonElement)) {
-    throw new Error(`Could not find toggle button for group: ${label}`);
+  let current: HTMLElement | null = groupLabel.parentElement;
+  while (current) {
+    const button = current.querySelector(
+      'button[aria-label="Collapse"], button[aria-label="Expand"]',
+    );
+    if (button instanceof HTMLButtonElement) {
+      return button;
+    }
+    current = current.parentElement;
   }
-  return button;
+  throw new Error(`Could not find toggle button for group: ${label}`);
 }
 
 describe('Accounts sidebar expansion', () => {

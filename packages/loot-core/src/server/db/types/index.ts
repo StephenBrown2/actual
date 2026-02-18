@@ -31,6 +31,7 @@ export type DbAccountSubgroup = {
   id: string;
   name: string;
   sort_order: number;
+  tombstone: 1 | 0;
 };
 
 export type DbBank = {

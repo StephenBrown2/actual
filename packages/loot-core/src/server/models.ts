@@ -81,12 +81,7 @@ export const accountSubgroupModel = {
     accountSubgroup: Partial<DbAccountSubgroup>,
     { update }: { update?: boolean } = {},
   ): DbAccountSubgroup {
-    requiredFields(
-      'accountSubgroup',
-      accountSubgroup,
-      update ? ['name'] : ['name'],
-      update,
-    );
+    requiredFields('accountSubgroup', accountSubgroup, ['name'], update);
 
     const { sort_order: _sort_order, ...rest } = accountSubgroup;
     return { ...rest } as DbAccountSubgroup;

@@ -23,6 +23,8 @@ import { getNormalisedString } from 'loot-core/shared/normalisation';
 
 import { useProperFocus } from '@desktop-client/hooks/useProperFocus';
 
+export type AutocompleteItemProps = ComponentProps<typeof View>;
+
 type CommonAutocompleteProps<T extends AutocompleteItem> = {
   focused?: boolean;
   embedded?: boolean;
@@ -33,7 +35,7 @@ type CommonAutocompleteProps<T extends AutocompleteItem> = {
   renderInput?: (props: ComponentProps<typeof Input>) => ReactNode;
   renderItems?: (
     items: T[],
-    getItemProps: (arg: { item: T }) => ComponentProps<typeof View>,
+    getItemProps: (arg: { item: T }) => AutocompleteItemProps,
     idx: number,
     value?: string,
   ) => ReactNode;
@@ -146,7 +148,7 @@ function defaultRenderInput(props: ComponentProps<typeof Input>) {
 
 function defaultRenderItems<T extends AutocompleteItem>(
   items: T[],
-  getItemProps: (arg: { item: T }) => ComponentProps<typeof View>,
+  getItemProps: (arg: { item: T }) => AutocompleteItemProps,
   highlightedIndex: number,
 ) {
   return (

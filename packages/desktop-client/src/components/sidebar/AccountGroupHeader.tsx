@@ -13,6 +13,7 @@ import { CellValue } from '@desktop-client/components/spreadsheet/CellValue';
 import type { Binding, SheetFields } from '@desktop-client/spreadsheet';
 
 const fontWeight = 600;
+const NO_ACCOUNT_GROUP_HEADER_MATCH_PATH = '/__no-account-group-header-match__';
 
 type AccountGroupHeaderProps<FieldName extends SheetFields<'account'>> = {
   name: string;
@@ -31,7 +32,11 @@ export function AccountGroupHeader<FieldName extends SheetFields<'account'>>({
   isExpanded,
   onToggle,
 }: AccountGroupHeaderProps<FieldName>) {
-  const match = useMatch({ path: to || '', end: !!isRoot });
+  const routeMatch = useMatch({
+    path: to ?? NO_ACCOUNT_GROUP_HEADER_MATCH_PATH,
+    end: !!isRoot,
+  });
+  const match = to ? routeMatch : null;
   const [showChevron, setShowChevron] = useState(false);
 
   const wrapperStyle = {
@@ -69,7 +74,11 @@ export function AccountGroupHeader<FieldName extends SheetFields<'account'>>({
       onMouseLeave={() => setShowChevron(false)}
       onFocusCapture={() => setShowChevron(true)}
       onBlurCapture={e => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+        const { relatedTarget } = e;
+        if (
+          !(relatedTarget instanceof Node) ||
+          !e.currentTarget.contains(relatedTarget)
+        ) {
           setShowChevron(false);
         }
       }}

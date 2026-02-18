@@ -1,5 +1,5 @@
-import { forwardRef, useCallback, useMemo, useRef } from 'react';
-import type { ComponentPropsWithoutRef, CSSProperties } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
+import type { ComponentPropsWithoutRef, CSSProperties, Ref } from 'react';
 import type { DragItem } from 'react-aria';
 import {
   DropIndicator,
@@ -338,31 +338,35 @@ function AllAccountList({
             amount={getAllAccountsBalance()}
           />
           {onBudgetAccounts.length > 0 && (
-            <AccountHeader
-              id="onbudget"
-              name={t('On budget')}
-              amount={getOnBudgetBalance()}
-            />
+            <>
+              <AccountHeader
+                id="onbudget"
+                name={t('On budget')}
+                amount={getOnBudgetBalance()}
+              />
+              <AccountListBySubgroup
+                ariaLabel={t('On budget accounts')}
+                accounts={onBudgetAccounts}
+                getAccountBalance={getAccountBalance}
+                onOpenAccount={onOpenAccount}
+              />
+            </>
           )}
-          <AccountListBySubgroup
-            ariaLabel={t('On budget accounts')}
-            accounts={onBudgetAccounts}
-            getAccountBalance={getAccountBalance}
-            onOpenAccount={onOpenAccount}
-          />
           {offBudgetAccounts.length > 0 && (
-            <AccountHeader
-              id="offbudget"
-              name={t('Off budget')}
-              amount={getOffBudgetBalance()}
-            />
+            <>
+              <AccountHeader
+                id="offbudget"
+                name={t('Off budget')}
+                amount={getOffBudgetBalance()}
+              />
+              <AccountListBySubgroup
+                ariaLabel={t('Off budget accounts')}
+                accounts={offBudgetAccounts}
+                getAccountBalance={getAccountBalance}
+                onOpenAccount={onOpenAccount}
+              />
+            </>
           )}
-          <AccountListBySubgroup
-            ariaLabel={t('Off budget accounts')}
-            accounts={offBudgetAccounts}
-            getAccountBalance={getAccountBalance}
-            onOpenAccount={onOpenAccount}
-          />
           {closedAccounts.length > 0 && (
             <AccountHeader
               id="closed"
@@ -397,117 +401,110 @@ type AccountListProps = {
     accountId: AccountEntity['id'],
   ) => Binding<'account', 'balance'>;
   onOpenAccount: (account: AccountEntity) => void;
+  ref?: Ref<HTMLDivElement>;
 };
 
-const AccountList = forwardRef<HTMLDivElement, AccountListProps>(
-  (
-    {
-      ariaLabel,
-      accounts,
-      getAccountBalance: getBalanceBinding,
-      onOpenAccount,
-    }: AccountListProps,
-    ref,
-  ) => {
-    const failedAccounts = useFailedAccounts();
-    const syncingAccountIds = useSelector(
-      state => state.account.accountsSyncing,
-    );
-    const updatedAccounts = useSelector(state => state.account.updatedAccounts);
+function AccountList({
+  ariaLabel,
+  accounts,
+  getAccountBalance: getBalanceBinding,
+  onOpenAccount,
+  ref,
+}: AccountListProps) {
+  const failedAccounts = useFailedAccounts();
+  const syncingAccountIds = useSelector(state => state.account.accountsSyncing);
+  const updatedAccounts = useSelector(state => state.account.updatedAccounts);
 
-    const moveAccount = useMoveAccountMutation();
+  const moveAccount = useMoveAccountMutation();
 
-    const { dragAndDropHooks } = useDragAndDrop({
-      getItems: keys =>
-        [...keys].map(
-          key =>
-            ({
-              'text/plain': key as AccountEntity['id'],
-            }) as DragItem,
-        ),
-      renderDropIndicator: target => {
-        return (
-          <DropIndicator
-            target={target}
-            className={css({
-              '&[data-drop-target]': {
-                height: 4,
-                backgroundColor: theme.tableBorderSeparator,
-                opacity: 1,
-                borderRadius: 4,
-              },
-            })}
-          />
+  const { dragAndDropHooks } = useDragAndDrop({
+    getItems: keys =>
+      [...keys].map(
+        key =>
+          ({
+            'text/plain': key as AccountEntity['id'],
+          }) as DragItem,
+      ),
+    renderDropIndicator: target => {
+      return (
+        <DropIndicator
+          target={target}
+          className={css({
+            '&[data-drop-target]': {
+              height: 4,
+              backgroundColor: theme.tableBorderSeparator,
+              opacity: 1,
+              borderRadius: 4,
+            },
+          })}
+        />
+      );
+    },
+    onReorder: e => {
+      const [key] = e.keys;
+      const accountIdToMove = key as AccountEntity['id'];
+      const targetAccountId = e.target.key as AccountEntity['id'];
+
+      if (e.target.dropPosition === 'before') {
+        moveAccount.mutate({
+          id: accountIdToMove,
+          targetId: targetAccountId,
+        });
+      } else if (e.target.dropPosition === 'after') {
+        const targetAccountIndex = accounts.findIndex(
+          account => account.id === e.target.key,
         );
-      },
-      onReorder: e => {
-        const [key] = e.keys;
-        const accountIdToMove = key as AccountEntity['id'];
-        const targetAccountId = e.target.key as AccountEntity['id'];
-
-        if (e.target.dropPosition === 'before') {
-          moveAccount.mutate({
-            id: accountIdToMove,
-            targetId: targetAccountId,
-          });
-        } else if (e.target.dropPosition === 'after') {
-          const targetAccountIndex = accounts.findIndex(
-            account => account.id === e.target.key,
+        if (targetAccountIndex === -1) {
+          throw new Error(
+            `Internal error: account with ID ${targetAccountId} not found.`,
           );
-          if (targetAccountIndex === -1) {
-            throw new Error(
-              `Internal error: account with ID ${targetAccountId} not found.`,
-            );
-          }
-
-          const nextToTargetAccount = accounts[targetAccountIndex + 1];
-
-          moveAccount.mutate({
-            id: accountIdToMove,
-            // Due to the way `moveAccount` works, we use the account next to the
-            // actual target account here because `moveAccount` always shoves the
-            // account *before* the target account.
-            // On the other hand, using `null` as `targetId`moves the account
-            // to the end of the list.
-            targetId: nextToTargetAccount?.id || null,
-          });
         }
-      },
-    });
-    return (
-      <ListBox
-        aria-label={ariaLabel}
-        items={accounts}
-        dragAndDropHooks={dragAndDropHooks}
-        ref={ref}
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          margin: '0 8px',
-          border: `1px solid ${theme.tableBorder}`,
-          borderRadius: 8,
-          overflow: 'hidden',
-        }}
-      >
-        {account => (
-          <AccountListItem
-            key={account.id}
-            id={account.id}
-            value={account}
-            isUpdated={updatedAccounts && updatedAccounts.includes(account.id)}
-            isConnected={!!account.bank}
-            isPending={syncingAccountIds.includes(account.id)}
-            isFailed={failedAccounts && failedAccounts.has(account.id)}
-            getBalanceQuery={getBalanceBinding}
-            onSelect={onOpenAccount}
-          />
-        )}
-      </ListBox>
-    );
-  },
-);
 
-AccountList.displayName = 'AccountList';
+        const nextToTargetAccount = accounts[targetAccountIndex + 1];
+
+        moveAccount.mutate({
+          id: accountIdToMove,
+          // Due to the way `moveAccount` works, we use the account next to the
+          // actual target account here because `moveAccount` always shoves the
+          // account *before* the target account.
+          // On the other hand, using `null` as `targetId`moves the account
+          // to the end of the list.
+          targetId: nextToTargetAccount?.id || null,
+        });
+      }
+    },
+  });
+  return (
+    <ListBox
+      aria-label={ariaLabel}
+      items={accounts}
+      dragAndDropHooks={dragAndDropHooks}
+      ref={ref}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        margin: '0 8px',
+        border: `1px solid ${theme.tableBorder}`,
+        borderRadius: 8,
+        overflow: 'hidden',
+      }}
+    >
+      {account => (
+        <AccountListItem
+          key={account.id}
+          id={account.id}
+          value={account}
+          isUpdated={updatedAccounts && updatedAccounts.includes(account.id)}
+          isConnected={!!account.bank}
+          isPending={syncingAccountIds.includes(account.id)}
+          isFailed={failedAccounts && failedAccounts.has(account.id)}
+          getBalanceQuery={getBalanceBinding}
+          onSelect={onOpenAccount}
+        />
+      )}
+    </ListBox>
+  );
+}
 
 type AccountListBySubgroupProps = {
   ariaLabel: string;

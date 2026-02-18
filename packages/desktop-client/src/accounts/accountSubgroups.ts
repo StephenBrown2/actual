@@ -5,6 +5,19 @@ export type GroupedAccountsBySubgroup = {
   subgroupEntries: Array<[string, AccountEntity[]]>;
 };
 
+export function compareBySubgroupOrder(
+  a: string,
+  b: string,
+  subgroupOrderByName: ReadonlyMap<string, number>,
+): number {
+  const aOrder = subgroupOrderByName.get(a) ?? Number.POSITIVE_INFINITY;
+  const bOrder = subgroupOrderByName.get(b) ?? Number.POSITIVE_INFINITY;
+  if (aOrder !== bOrder) {
+    return aOrder - bOrder;
+  }
+  return a.localeCompare(b);
+}
+
 export function groupAccountsBySubgroup(
   accounts: AccountEntity[],
 ): GroupedAccountsBySubgroup {
@@ -33,14 +46,9 @@ export function groupAccountsBySubgroup(
     }
   }
 
-  const subgroupEntries = [...subgroupMap.entries()].sort(([a], [b]) => {
-    const aOrder = subgroupOrderByName.get(a) ?? Number.POSITIVE_INFINITY;
-    const bOrder = subgroupOrderByName.get(b) ?? Number.POSITIVE_INFINITY;
-    if (aOrder !== bOrder) {
-      return aOrder - bOrder;
-    }
-    return a.localeCompare(b);
-  });
+  const subgroupEntries = [...subgroupMap.entries()].sort(([a], [b]) =>
+    compareBySubgroupOrder(a, b, subgroupOrderByName),
+  );
 
   return { ungroupedAccounts, subgroupEntries };
 }

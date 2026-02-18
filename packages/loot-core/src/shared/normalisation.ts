@@ -38,18 +38,18 @@ const TITLE_CASE_MINOR_WORDS = new Set([
  *   'the rise and fall' -> 'The Rise and Fall'
  */
 export function toTitleCase(value: string): string {
-  const words = value.split(' ');
+  const words = value.trim().split(/\s+/);
 
   return words
     .map((word, index) => {
-      const lower = word.toLocaleLowerCase();
+      const lower = word.toLowerCase();
       const isEdgeWord = index === 0 || index === words.length - 1;
 
       if (!isEdgeWord && TITLE_CASE_MINOR_WORDS.has(lower)) {
         return lower;
       }
 
-      return lower.charAt(0).toLocaleUpperCase() + lower.slice(1);
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
     })
     .join(' ');
 }

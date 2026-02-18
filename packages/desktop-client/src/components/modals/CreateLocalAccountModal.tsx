@@ -100,7 +100,6 @@ export function CreateLocalAccountModal() {
                 <InitialFocus>
                   <Input
                     name="name"
-                    autoFocus
                     value={name}
                     onChangeValue={setName}
                     onUpdate={value => {
@@ -130,11 +129,7 @@ export function CreateLocalAccountModal() {
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <AccountSubgroupAutocomplete
                       value={subgroup}
-                      onSelect={value => {
-                        if (typeof value === 'string') {
-                          setSubgroup(value);
-                        }
-                      }}
+                      onSelect={(id, value) => setSubgroup(id || value)}
                     />
                   </View>
                   <Text

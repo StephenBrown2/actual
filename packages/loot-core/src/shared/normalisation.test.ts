@@ -1,10 +1,9 @@
-import { describe, expect, it } from 'vitest';
-
 import { normalizeToTitleCase, toTitleCase } from './normalisation';
 
 describe('toTitleCase', () => {
   it('capitalises each word', () => {
     expect(toTitleCase('hello world')).toBe('Hello World');
+    expect(toTitleCase('hello  world')).toBe('Hello World');
   });
 
   it('keeps minor words lowercase in the middle', () => {

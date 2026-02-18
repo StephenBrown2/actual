@@ -17,9 +17,10 @@ import { css, cx } from '@emotion/css';
 import { getNormalisedString } from 'loot-core/shared/normalisation';
 
 import { Autocomplete, defaultFilterSuggestion } from './Autocomplete';
-import type { AutocompleteItem } from './Autocomplete';
+import type { AutocompleteItem, AutocompleteItemProps } from './Autocomplete';
 import { ItemHeader } from './ItemHeader';
 
+import { compareBySubgroupOrder } from '@desktop-client/accounts/accountSubgroups';
 import { useAccounts } from '@desktop-client/hooks/useAccounts';
 
 /**
@@ -71,9 +72,7 @@ type AccountSubgroupItemWithIndex = AccountSubgroupItem & {
 
 type AccountSubgroupListProps = {
   items: AccountSubgroupItem[];
-  getItemProps: (arg: {
-    item: AccountSubgroupItem;
-  }) => ComponentProps<typeof View>;
+  getItemProps: (arg: { item: AccountSubgroupItem }) => AutocompleteItemProps;
   highlightedIndex: number;
   embedded?: boolean;
   maxHeight?: number;
@@ -185,6 +184,34 @@ function customSort(obj: AccountSubgroupItem, value: string): number {
   return 1;
 }
 
+function filterSuggestions(
+  allSuggestions: AccountSubgroupItem[],
+  filterValue: string,
+) {
+  const normalizedValue = getNormalisedString(filterValue);
+  const filtered = allSuggestions
+    .filter(suggestion => {
+      if (suggestion.id === NEW_ITEM_ID) {
+        return filterValue !== '';
+      }
+      return defaultFilterSuggestion(suggestion, filterValue);
+    })
+    .sort(
+      (a, b) => customSort(a, normalizedValue) - customSort(b, normalizedValue),
+    );
+
+  // If exact match found anywhere in results, remove the create option.
+  const hasExactMatch = filtered.some(
+    suggestion =>
+      suggestion.id !== NEW_ITEM_ID &&
+      getNormalisedString(suggestion.name) === normalizedValue,
+  );
+  if (hasExactMatch) {
+    return filtered.filter(suggestion => suggestion.id !== NEW_ITEM_ID);
+  }
+  return filtered;
+}
+
 export type AccountSubgroupAutocompleteProps = {
   value?: string | null;
   inputProps?: ComponentProps<
@@ -231,7 +258,7 @@ export function AccountSubgroupAutocomplete({
       if (!account.subgroup) {
         continue;
       }
-      if (account.offbudget) {
+      if (account.offbudget === 1) {
         offBudget.add(account.subgroup);
       } else {
         onBudget.add(account.subgroup);
@@ -266,22 +293,10 @@ export function AccountSubgroupAutocomplete({
     }
 
     const orderedOnBudget = [...usedOnBudgetSubgroups].sort((a, b) => {
-      const aOrder = onBudgetOrderBySubgroup.get(a) ?? Number.POSITIVE_INFINITY;
-      const bOrder = onBudgetOrderBySubgroup.get(b) ?? Number.POSITIVE_INFINITY;
-      if (aOrder !== bOrder) {
-        return aOrder - bOrder;
-      }
-      return a.localeCompare(b);
+      return compareBySubgroupOrder(a, b, onBudgetOrderBySubgroup);
     });
     const orderedOffBudget = [...usedOffBudgetSubgroups].sort((a, b) => {
-      const aOrder =
-        offBudgetOrderBySubgroup.get(a) ?? Number.POSITIVE_INFINITY;
-      const bOrder =
-        offBudgetOrderBySubgroup.get(b) ?? Number.POSITIVE_INFINITY;
-      if (aOrder !== bOrder) {
-        return aOrder - bOrder;
-      }
-      return a.localeCompare(b);
+      return compareBySubgroupOrder(a, b, offBudgetOrderBySubgroup);
     });
 
     const seenNames = new Set<string>();
@@ -294,17 +309,20 @@ export function AccountSubgroupAutocomplete({
       usedItems.push({
         id: name,
         name,
-        group: 'used' as const,
-      });
+        group: 'used',
+      } satisfies AccountSubgroupItem);
     }
 
     const otherItems: AccountSubgroupItem[] = SUBGROUP_SUGGESTIONS.filter(
       name => !seenNames.has(name),
-    ).map(name => ({
-      id: name,
-      name,
-      group: 'other' as const,
-    }));
+    ).map(
+      name =>
+        ({
+          id: name,
+          name,
+          group: 'other',
+        }) satisfies AccountSubgroupItem,
+    );
 
     const allItems = [...usedItems, ...otherItems];
 
@@ -316,7 +334,7 @@ export function AccountSubgroupAutocomplete({
       {
         id: NEW_ITEM_ID,
         name: '',
-        group: 'other' as const,
+        group: 'other',
       } satisfies AccountSubgroupItem,
       ...allItems,
     ];
@@ -329,35 +347,6 @@ export function AccountSubgroupAutocomplete({
       onSelect?.(id, rawInputValue);
     }
   }
-
-  const filterSuggestions = (
-    allSuggestions: AccountSubgroupItem[],
-    filterValue: string,
-  ) => {
-    const normalizedValue = getNormalisedString(filterValue);
-    const filtered = allSuggestions
-      .filter(suggestion => {
-        if (suggestion.id === NEW_ITEM_ID) {
-          return filterValue !== '';
-        }
-        return defaultFilterSuggestion(suggestion, filterValue);
-      })
-      .sort(
-        (a, b) =>
-          customSort(a, normalizedValue) - customSort(b, normalizedValue),
-      );
-
-    // If exact match found anywhere in results, remove the create option.
-    const hasExactMatch = filtered.some(
-      suggestion =>
-        suggestion.id !== NEW_ITEM_ID &&
-        getNormalisedString(suggestion.name) === normalizedValue,
-    );
-    if (hasExactMatch) {
-      return filtered.filter(suggestion => suggestion.id !== NEW_ITEM_ID);
-    }
-    return filtered;
-  };
 
   return (
     <Autocomplete
@@ -378,9 +367,15 @@ export function AccountSubgroupAutocomplete({
       inputProps={{
         ...inputProps,
         autoCapitalize: 'words',
-        onBlur: () => setRawInput(''),
-        'aria-label': t('Account Subgroup'),
-        onChangeValue: setRawInput,
+        onBlur: e => {
+          inputProps?.onBlur?.(e);
+          setRawInput('');
+        },
+        'aria-label': inputProps?.['aria-label'] ?? t('Account Subgroup'),
+        onChangeValue: (value, event) => {
+          inputProps?.onChangeValue?.(value, event);
+          setRawInput(value);
+        },
       }}
       onUpdate={(id, inputValue) => onUpdate?.(id, makeNew(id, inputValue))}
       onSelect={handleSelect}
@@ -505,7 +500,8 @@ function AccountSubgroupItemComponent({
     : {};
 
   return (
-    <button
+    <View
+      as="button"
       type="button"
       className={cx(
         className,
@@ -527,10 +523,10 @@ function AccountSubgroupItemComponent({
       )}
       data-testid={`${item.name}-account-subgroup-item`}
       data-highlighted={highlighted || undefined}
-      {...(props as unknown as ComponentPropsWithoutRef<'button'>)}
+      {...props}
     >
       <TextOneLine>{item.name}</TextOneLine>
-    </button>
+    </View>
   );
 }
 

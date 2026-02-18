@@ -246,7 +246,9 @@ export function Account<FieldName extends SheetFields<'account'>>({
                     break;
                   }
                   case 'close': {
-                    void dispatch(openAccountCloseModal({ accountId: account.id }));
+                    void dispatch(
+                      openAccountCloseModal({ accountId: account.id }),
+                    );
                     break;
                   }
                   case 'reopen': {
@@ -264,7 +266,7 @@ export function Account<FieldName extends SheetFields<'account'>>({
                 setMenuOpen(false);
               }}
               items={[
-                { name: 'subgroup', text: t('Group') },
+                { name: 'subgroup', text: t('Subgroup') },
                 { name: 'rename', text: t('Rename') },
                 account.closed
                   ? { name: 'reopen', text: t('Reopen') }
@@ -273,7 +275,7 @@ export function Account<FieldName extends SheetFields<'account'>>({
             />
           </Popover>
         )}
-        {account && (
+        {account && !menuOpen && (
           <Popover
             triggerRef={triggerRef}
             placement="bottom start"
@@ -289,11 +291,11 @@ export function Account<FieldName extends SheetFields<'account'>>({
                 embedded
                 maxHeight={150}
                 closeOnBlur={false}
-                onSelect={(_id, value) => {
+                onSelect={(id, _value) => {
                   updateAccount.mutate({
                     account: {
                       ...account,
-                      subgroup: value || null,
+                      subgroup: id || null,
                     },
                   });
                   setGroupMenuOpen(false);
@@ -381,7 +383,7 @@ export function Account<FieldName extends SheetFields<'account'>>({
       triggerProps={{
         delay: 1000,
         closeDelay: 250,
-        isDisabled: menuOpen,
+        isDisabled: menuOpen || groupMenuOpen,
       }}
     >
       {accountRow}

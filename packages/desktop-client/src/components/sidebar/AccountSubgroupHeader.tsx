@@ -49,7 +49,11 @@ export function AccountSubgroupHeader<
       onMouseLeave={() => setShowChevron(false)}
       onFocusCapture={() => setShowChevron(true)}
       onBlurCapture={e => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+        if (!(e.relatedTarget instanceof Node)) {
+          setShowChevron(false);
+          return;
+        }
+        if (!e.currentTarget.contains(e.relatedTarget)) {
           setShowChevron(false);
         }
       }}
@@ -60,7 +64,7 @@ export function AccountSubgroupHeader<
       onClick={() => onToggle()}
       style={{
         ...styles.smallText,
-        color: theme.sidebarTextLight,
+        color: theme.sidebarSubgroupHeaderText,
         paddingTop: 4,
         paddingBottom: 4,
         paddingLeft: 7,

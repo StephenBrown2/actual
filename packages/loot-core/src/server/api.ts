@@ -596,8 +596,9 @@ handlers['api/account-update'] = withMutation(async function ({ id, fields }) {
   const account = accountModel.fromExternal(fields);
 
   if ('subgroup' in fields) {
-    account.subgroup = account.subgroup?.trim()
-      ? await db.getOrCreateAccountSubgroup(account.subgroup)
+    const trimmedSubgroup = account.subgroup?.trim();
+    account.subgroup = trimmedSubgroup
+      ? await db.getOrCreateAccountSubgroup(trimmedSubgroup)
       : null;
   }
 

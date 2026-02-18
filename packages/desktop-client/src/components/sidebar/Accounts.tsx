@@ -91,7 +91,11 @@ function getBudgetPrefixFromSubgroupKey(subgroupKey: string): string {
 }
 
 function getSubgroupNameFromKey(subgroupKey: string): string {
-  return subgroupKey.split(SUBGROUP_SEPARATOR)[1];
+  const separatorIndex = subgroupKey.indexOf(SUBGROUP_SEPARATOR);
+  if (separatorIndex === -1) {
+    return '';
+  }
+  return subgroupKey.slice(separatorIndex + SUBGROUP_SEPARATOR.length);
 }
 
 function getIsOffBudgetForDropTargetKey(key: string): boolean | null {
@@ -272,16 +276,20 @@ export function Accounts() {
     [allSubgroupKeys, setSavedExpandedKeys],
   );
 
-  const onExpandedChange = useCallback(persistExpandedKeys, [
-    persistExpandedKeys,
-  ]);
+  const onExpandedChange = persistExpandedKeys;
 
   useEffect(() => {
     if (!savedExpandedKeys) {
       return;
     }
-    const next = savedExpandedKeys
-      .filter(key => !key.startsWith(SEEN_KEY_PREFIX))
+    const persistedNonSeen = savedExpandedKeys.filter(
+      key => !key.startsWith(SEEN_KEY_PREFIX),
+    );
+    const unseenSubgroupKeys = allSubgroupKeys.filter(
+      key => !savedExpandedKeys.includes(`${SEEN_KEY_PREFIX}${key}`),
+    );
+    const next = persistedNonSeen
+      .concat(unseenSubgroupKeys)
       .concat(allSubgroupKeys.map(key => `${SEEN_KEY_PREFIX}${key}`));
     const currentSet = new Set(savedExpandedKeys);
     const nextSet = new Set(next);
@@ -314,6 +322,30 @@ export function Accounts() {
     const keyStr = String(key);
     return isSubgroupKey(keyStr) ? getSubgroupNameFromKey(keyStr) : null;
   }
+
+  const getAccountContainerKey = useCallback(
+    (accountId: string): string | null => {
+      const rootChildren = treeItems[0]?.children ?? [];
+      for (const group of rootChildren) {
+        const groupChildren = group.children ?? [];
+        if (groupChildren.some(node => node.id === accountId && node.account)) {
+          return group.id;
+        }
+        for (const node of groupChildren) {
+          if (
+            node.isSubgroup &&
+            node.children?.some(
+              child => child.id === accountId && child.account != null,
+            )
+          ) {
+            return node.id;
+          }
+        }
+      }
+      return null;
+    },
+    [treeItems],
+  );
 
   const getSubgroupKeysForPrefix = useCallback(
     (prefix: string): string[] => {
@@ -440,8 +472,7 @@ export function Accounts() {
           if (targetIdx < 0) {
             return;
           }
-          const nextAccountId =
-            targetIdx >= 0 ? siblingIds[targetIdx + 1] : undefined;
+          const nextAccountId = siblingIds[targetIdx + 1];
           moveAccount.mutate({
             id: accountId,
             targetId: nextAccountId || null,
@@ -477,6 +508,13 @@ export function Accounts() {
         target.dropPosition === 'on' &&
         (isSubgroupKey(key) || key === ON_BUDGET_KEY || key === OFF_BUDGET_KEY)
       ) {
+        const hasDraggedSubgroup = [...draggedKeysRef.current].some(
+          draggedKey => isSubgroupKey(String(draggedKey)),
+        );
+        if (hasDraggedSubgroup) {
+          return 'cancel';
+        }
+
         const isTargetOffBudget = getIsOffBudgetForDropTargetKey(key);
         if (isTargetOffBudget != null) {
           for (const draggedKey of draggedKeysRef.current) {
@@ -496,11 +534,44 @@ export function Accounts() {
       }
 
       if (isSubgroupKey(key) && target.dropPosition !== 'on') {
+        const targetPrefix = getBudgetPrefixFromSubgroupKey(key);
+        for (const draggedKey of draggedKeysRef.current) {
+          const draggedKeyStr = String(draggedKey);
+          if (!isSubgroupKey(draggedKeyStr)) {
+            return 'cancel';
+          }
+          const draggedPrefix = getBudgetPrefixFromSubgroupKey(draggedKeyStr);
+          if (draggedPrefix !== targetPrefix) {
+            return 'cancel';
+          }
+        }
         return 'move';
       }
 
       const account = findAccountById(key);
       if (account && target.dropPosition !== 'on') {
+        const targetContainerKey = getAccountContainerKey(key);
+        if (!targetContainerKey) {
+          return 'cancel';
+        }
+        for (const draggedKey of draggedKeysRef.current) {
+          const draggedKeyStr = String(draggedKey);
+          if (
+            isSubgroupKey(draggedKeyStr) ||
+            NON_DRAGGABLE_KEYS.has(draggedKeyStr)
+          ) {
+            return 'cancel';
+          }
+          const draggedAccount = findAccountById(draggedKeyStr);
+          if (!draggedAccount) {
+            return 'cancel';
+          }
+          if (
+            getAccountContainerKey(draggedAccount.id) !== targetContainerKey
+          ) {
+            return 'cancel';
+          }
+        }
         return 'move';
       }
 

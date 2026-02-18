@@ -327,8 +327,7 @@ async function linkPluggyAiAccount({
       throw new Error(`Account with ID ${upgradingId} not found.`);
     }
 
-    const shouldSetSubgroup =
-      normalizedSubgroup != null && !accRow.subgroup?.trim();
+    const shouldSetSubgroup = normalizedSubgroup != null && !accRow.subgroup;
     const accountSubgroupId = shouldSetSubgroup
       ? await db.getOrCreateAccountSubgroup(normalizedSubgroup)
       : undefined;
@@ -561,6 +560,27 @@ async function moveAccountSubgroup({
   subgroup: string;
   targetSubgroup: string | null;
 }) {
+  const subgroupId = await getAccountSubgroupIdByName(
+    subgroup,
+    `Subgroup '${subgroup}' was not found`,
+  );
+
+  let targetSubgroupId: db.DbAccountSubgroup['id'] | null = null;
+  if (targetSubgroup) {
+    targetSubgroupId = await getAccountSubgroupIdByName(
+      targetSubgroup,
+      `Target subgroup '${targetSubgroup}' was not found`,
+    );
+  }
+
+  await db.moveAccountSubgroup(subgroupId, targetSubgroupId);
+}
+
+async function getAccountSubgroupIdByName(
+  name: string,
+  notFoundMessage: string,
+): Promise<db.DbAccountSubgroup['id']> {
+  // This query assumes account_subgroups.name is unique among live rows.
   const subgroupRow = await db.first<Pick<db.DbAccountSubgroup, 'id'>>(
     `
       SELECT id
@@ -568,31 +588,12 @@ async function moveAccountSubgroup({
       WHERE tombstone = 0 AND name = ?
       LIMIT 1
     `,
-    [subgroup],
+    [name],
   );
-
   if (!subgroupRow) {
-    throw APIError(`Subgroup '${subgroup}' was not found`);
+    throw APIError(notFoundMessage);
   }
-
-  let targetSubgroupId: db.DbAccountSubgroup['id'] | null = null;
-  if (targetSubgroup) {
-    const targetRow = await db.first<Pick<db.DbAccountSubgroup, 'id'>>(
-      `
-        SELECT id
-        FROM account_subgroups
-        WHERE tombstone = 0 AND name = ?
-        LIMIT 1
-      `,
-      [targetSubgroup],
-    );
-    if (!targetRow) {
-      throw APIError(`Target subgroup '${targetSubgroup}' was not found`);
-    }
-    targetSubgroupId = targetRow.id;
-  }
-
-  await db.moveAccountSubgroup(subgroupRow.id, targetSubgroupId);
+  return subgroupRow.id;
 }
 
 async function setSecret({

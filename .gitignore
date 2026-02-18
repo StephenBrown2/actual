@@ -79,3 +79,6 @@ build/
 
 *storybook.log
 storybook-static
+
+# Local pre-commit config
+.pre-commit-config.yaml

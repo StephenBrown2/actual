@@ -30,6 +30,8 @@ test.describe('Mobile Accounts', () => {
     const accountsPage = await navigation.goToAccountsPage();
     await accountsPage.waitFor();
 
+    // In the current seeded test budget ordering, index 3 maps to "Ally Savings"
+    // (see the canonical fixture data consumed by accountsPage.getNthAccount()).
     const account = await accountsPage.getNthAccount(3);
 
     await expect(account.name).toHaveText('Ally Savings');

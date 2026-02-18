@@ -25,7 +25,7 @@ export const accountModel = {
     return {
       id: account.id,
       name: account.name,
-      subgroup: account.subgroup || null,
+      subgroup: account.subgroup ?? null,
       offbudget: account.offbudget ? true : false,
       closed: account.closed ? true : false,
       balance_current: account.balance_current ?? null,
