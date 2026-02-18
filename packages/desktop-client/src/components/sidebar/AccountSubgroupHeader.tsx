@@ -23,10 +23,6 @@ export type AccountSubgroupHeaderProps<
   query?: Binding<'account', FieldName>;
 };
 
-/**
- * Account subgroup header with a collapse/expand chevron and optional
- * aggregate balance.
- */
 export function AccountSubgroupHeader<
   FieldName extends SheetFields<'account'>,
 >({

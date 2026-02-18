@@ -13,12 +13,6 @@ type ExpandChevronProps = {
   style?: CSSProperties;
 };
 
-/**
- * Chevron that toggles the expanded/collapsed state of a tree node.
- * Uses a plain `<button>` with an explicit `onToggle` callback so we
- * bypass the react-aria slot mechanism (which doesn't reliably fire
- * in all configurations) and directly update `expandedKeys`.
- */
 export function ExpandChevron({
   isExpanded,
   onToggle,

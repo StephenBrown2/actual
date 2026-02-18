@@ -68,7 +68,6 @@ export const schema = {
   accounts: {
     id: f('id'),
     name: f('string', { required: true }),
-    type: f('string'),
     subgroup: f('id', { ref: 'account_subgroups' }),
     offbudget: f('boolean'),
     closed: f('boolean'),
@@ -241,12 +240,6 @@ export const schemaConfig: SchemaConfig = {
       case 'payees':
         return 'v_payees';
 
-      case 'accounts':
-        return 'v_accounts';
-
-      case 'account_subgroups':
-        return 'v_account_subgroups';
-
       default:
     }
     return name;
@@ -273,8 +266,6 @@ export const schemaConfig: SchemaConfig = {
           ];
         case 'category_groups':
           return ['is_income', 'sort_order', 'id'];
-        case 'account_subgroups':
-          return ['sort_order', 'id'];
         case 'categories':
           return ['sort_order', 'id'];
         case 'payees':
@@ -350,26 +341,6 @@ export const schemaConfig: SchemaConfig = {
         LEFT JOIN schedules_json_paths _paths ON _paths.schedule_id = _.id
         LEFT JOIN rules _rules ON _rules.id = _.rule
         LEFT JOIN payee_mapping pm ON pm.id = json_extract(_rules.conditions, _paths.payee || '.value')
-        `;
-      },
-    },
-
-    accounts: {
-      v_accounts: internalFields => {
-        const fields = internalFields();
-
-        return `
-          SELECT ${fields} FROM accounts _
-        `;
-      },
-    },
-
-    account_subgroups: {
-      v_account_subgroups: internalFields => {
-        const fields = internalFields();
-
-        return `
-          SELECT ${fields} FROM account_subgroups _
         `;
       },
     },

@@ -219,12 +219,11 @@ export function AccountSubgroupAutocomplete({
   renderItem = defaultRenderItem,
 }: AccountSubgroupAutocompleteProps) {
   const { t } = useTranslation();
-  const accounts = useAccounts();
+  const { data: accounts = [] } = useAccounts();
 
   const [rawInput, setRawInput] = useState('');
   const hasInput = !!rawInput;
 
-  // Derive used group names from existing accounts
   const { usedOnBudgetSubgroups, usedOffBudgetSubgroups } = useMemo(() => {
     const onBudget = new Set<string>();
     const offBudget = new Set<string>();
@@ -285,21 +284,9 @@ export function AccountSubgroupAutocomplete({
       return a.localeCompare(b);
     });
 
-    const remainingOnBudget = [...usedOnBudgetSubgroups]
-      .filter(name => !orderedOnBudget.includes(name))
-      .sort((a, b) => a.localeCompare(b));
-    const remainingOffBudget = [...usedOffBudgetSubgroups]
-      .filter(name => !orderedOffBudget.includes(name))
-      .sort((a, b) => a.localeCompare(b));
-
     const seenNames = new Set<string>();
     const usedItems: AccountSubgroupItem[] = [];
-    for (const name of [
-      ...orderedOnBudget,
-      ...remainingOnBudget,
-      ...orderedOffBudget,
-      ...remainingOffBudget,
-    ]) {
+    for (const name of [...orderedOnBudget, ...orderedOffBudget]) {
       if (seenNames.has(name)) {
         continue;
       }

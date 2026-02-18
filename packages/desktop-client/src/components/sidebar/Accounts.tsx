@@ -26,6 +26,7 @@ import {
   useMoveAccountSubgroupMutation,
   useUpdateAccountMutation,
 } from '@desktop-client/accounts';
+import { groupAccountsBySubgroup as groupAccountsBySubgroupData } from '@desktop-client/accounts/accountSubgroups';
 import { useAccounts } from '@desktop-client/hooks/useAccounts';
 import { useClosedAccounts } from '@desktop-client/hooks/useClosedAccounts';
 import { useFailedAccounts } from '@desktop-client/hooks/useFailedAccounts';
@@ -39,7 +40,6 @@ import * as bindings from '@desktop-client/spreadsheet/bindings';
 
 const fontWeight = 600;
 
-/** Style that hides an element visually but keeps it in the a11y tree. */
 const visuallyHiddenStyle: CSSProperties = {
   position: 'absolute',
   width: 1,
@@ -51,7 +51,6 @@ const visuallyHiddenStyle: CSSProperties = {
   border: 0,
 };
 
-/** Structural keys that should be expanded by default. */
 const ALL_ACCOUNTS_KEY = 'all-accounts';
 const ON_BUDGET_KEY = 'onbudget';
 const OFF_BUDGET_KEY = 'offbudget';
@@ -70,16 +69,12 @@ type TreeNode = {
   id: string;
   name: string;
   children?: TreeNode[];
-  // Only set on account leaf nodes
   account?: AccountEntity;
-  // Only set on group/header nodes
   to?: string;
   query?: Binding<'account', SheetFields<'account'>>;
-  isTitle?: boolean;
   isSubgroup?: boolean;
 };
 
-/** Keys that represent structural nodes which must not be dragged. */
 const NON_DRAGGABLE_KEYS = new Set([
   ALL_ACCOUNTS_KEY,
   ON_BUDGET_KEY,
@@ -123,66 +118,35 @@ function isTextDragItem(item: { kind: string }): item is {
   );
 }
 
-/**
- * Group a list of accounts by their subgroup field, returning:
- * - ungrouped accounts (subgroup is null/empty) as direct children
- * - grouped accounts nested under subgroup nodes
- *
- * Subgroup headers are ordered by `account_subgroups.sort_order`
- * (available as `account.subgroup_sort_order`), then alphabetically.
- */
-function groupAccountsBySubgroup(
+function buildSubgroupTreeNodes(
   accounts: AccountEntity[],
   budgetPrefix: string,
 ): TreeNode[] {
-  const untyped: TreeNode[] = [];
-  const bySubgroup = new Map<string, AccountEntity[]>();
-  const subgroupOrderByName = new Map<string, number>();
-
-  for (const account of accounts) {
-    if (!account.subgroup) {
-      untyped.push({
-        id: account.id,
-        name: account.name,
-        account,
-      });
-    } else {
-      const list = bySubgroup.get(account.subgroup) || [];
-      list.push(account);
-      bySubgroup.set(account.subgroup, list);
-      if (
-        account.subgroup_sort_order != null &&
-        !subgroupOrderByName.has(account.subgroup)
-      ) {
-        subgroupOrderByName.set(account.subgroup, account.subgroup_sort_order);
-      }
-    }
-  }
-
+  const { ungroupedAccounts, subgroupEntries } =
+    groupAccountsBySubgroupData(accounts);
   const isOffBudget = budgetPrefix === OFF_BUDGET_KEY;
-
-  const subgroupNodes: TreeNode[] = [...bySubgroup.entries()]
-    .sort(([a], [b]) => {
-      const aOrder = subgroupOrderByName.get(a) ?? Number.POSITIVE_INFINITY;
-      const bOrder = subgroupOrderByName.get(b) ?? Number.POSITIVE_INFINITY;
-      if (aOrder !== bOrder) {
-        return aOrder - bOrder;
-      }
-      return a.localeCompare(b);
-    })
-    .map(([subgroupName, accts]) => ({
+  const subgroupNodes: TreeNode[] = subgroupEntries.map(
+    ([subgroupName, groupedAccounts]) => ({
       id: `${budgetPrefix}${SUBGROUP_SEPARATOR}${subgroupName}`,
       name: subgroupName,
       isSubgroup: true,
       query: bindings.accountSubgroupBalance(subgroupName, isOffBudget),
-      children: accts.map(account => ({
+      children: groupedAccounts.map(account => ({
         id: account.id,
         name: account.name,
         account,
       })),
-    }));
+    }),
+  );
 
-  return [...untyped, ...subgroupNodes];
+  return [
+    ...ungroupedAccounts.map(account => ({
+      id: account.id,
+      name: account.name,
+      account,
+    })),
+    ...subgroupNodes,
+  ];
 }
 
 export function Accounts() {
@@ -195,12 +159,10 @@ export function Accounts() {
   const closedAccounts = useClosedAccounts();
   const syncingAccountIds = useSelector(state => state.account.accountsSyncing);
 
-  // Persisted expand/collapse state
   const [savedExpandedKeys, setSavedExpandedKeys] = useLocalPref(
     'sidebar.expandedKeys',
   );
 
-  // Build the tree data structure
   const treeItems = useMemo(() => {
     const children: TreeNode[] = [];
 
@@ -210,8 +172,7 @@ export function Accounts() {
         name: t('On budget'),
         to: '/accounts/onbudget',
         query: bindings.onBudgetAccountBalance(),
-        isTitle: true,
-        children: groupAccountsBySubgroup(onBudgetAccounts, ON_BUDGET_KEY),
+        children: buildSubgroupTreeNodes(onBudgetAccounts, ON_BUDGET_KEY),
       });
     }
 
@@ -221,20 +182,15 @@ export function Accounts() {
         name: t('Off budget'),
         to: '/accounts/offbudget',
         query: bindings.offBudgetAccountBalance(),
-        isTitle: true,
-        children: groupAccountsBySubgroup(offbudgetAccounts, OFF_BUDGET_KEY),
+        children: buildSubgroupTreeNodes(offbudgetAccounts, OFF_BUDGET_KEY),
       });
     }
 
-    // Closed accounts as a collapsible tree node (collapsed by default,
-    // hidden entirely when there are no closed accounts)
     if (closedAccounts.length > 0) {
       children.push({
         id: CLOSED_ACCOUNTS_KEY,
         name: t('Closed accounts'),
-        // to: '/accounts/closed',
         query: bindings.closedAccountBalance(),
-        isTitle: true,
         children: closedAccounts.map(account => ({
           id: account.id,
           name: account.name,
@@ -249,13 +205,11 @@ export function Accounts() {
         name: t('All accounts'),
         to: '/accounts',
         query: bindings.allAccountBalance(),
-        isTitle: true,
         children,
       },
     ];
   }, [onBudgetAccounts, offbudgetAccounts, closedAccounts, t]);
 
-  // Collect all subgroup IDs so they can be expanded by default
   const allSubgroupKeys = useMemo(() => {
     const keys: string[] = [];
     function walk(nodes: TreeNode[]) {
@@ -288,12 +242,8 @@ export function Accounts() {
     return { expanded, seen };
   }, [savedExpandedKeys]);
 
-  // Default expanded: structural keys + all subgroups.
-  // When the user has a saved pref, only auto-expand *new* subgroups
-  // that the user has not seen before.
   const expandedKeys = useMemo(() => {
     if (!savedExpanded) {
-      // No saved state yet — expand everything except closed
       return new Set<Key>([...STRUCTURAL_EXPANDED_KEYS, ...allSubgroupKeys]);
     }
     const unseenSubgroupKeys = allSubgroupKeys.filter(
@@ -342,7 +292,6 @@ export function Accounts() {
     }
   }, [allSubgroupKeys, savedExpandedKeys, setSavedExpandedKeys]);
 
-  /** Toggle a single key in the expanded set. */
   const toggleExpanded = useCallback(
     (key: string) => {
       const next = new Set(expandedKeysRef.current);
@@ -356,26 +305,18 @@ export function Accounts() {
     [persistExpandedKeys],
   );
 
-  // Find the account node for a given tree key
   function findAccountById(id: string): AccountEntity | undefined {
     return accounts.find(a => a.id === id);
   }
 
-  // Find what subgroup a tree key belongs to
   function findSubgroupForKey(key: Key): string | null {
     const keyStr = String(key);
-    // Check if the key itself is a subgroup
     if (isSubgroupKey(keyStr)) {
       return getSubgroupNameFromKey(keyStr);
     }
     return null;
   }
 
-  /**
-   * Compute the ordered list of subgroup keys for a given budget
-   * prefix from the current tree, so we can splice into it when
-   * reordering.
-   */
   const getSubgroupKeysForPrefix = useCallback(
     (prefix: string): string[] => {
       const budgetNode = treeItems[0]?.children?.find(c => c.id === prefix);
@@ -449,16 +390,11 @@ export function Accounts() {
     }
   }
 
-  // Track the keys currently being dragged so getDropOperation can
-  // validate cross-budget drops.  Updated every time getItems fires
-  // (i.e. at the start of each drag).
   const draggedKeysRef = useRef<Set<Key>>(new Set());
 
   const { dragAndDropHooks } = useDragAndDrop({
     getItems(keys) {
       draggedKeysRef.current = new Set(keys);
-      // Only allow dragging accounts and subgroups – not structural
-      // nodes (all-accounts, onbudget, offbudget, closed).
       const draggable = [...keys].filter(
         key => !NON_DRAGGABLE_KEYS.has(String(key)),
       );
@@ -473,7 +409,6 @@ export function Accounts() {
       const isSubgroupDrag = isSubgroupKey(keyStr);
       const isSubgroupTarget = isSubgroupKey(targetStr);
 
-      // ── Subgroup reorder ──
       if (isSubgroupDrag && isSubgroupTarget) {
         if (e.target.dropPosition === 'before') {
           moveAccountSubgroup.mutate({
@@ -497,7 +432,6 @@ export function Accounts() {
         return;
       }
 
-      // ── Account reorder ──
       if (!isSubgroupDrag) {
         const accountId = keyStr;
         const targetAccountId = targetStr;
@@ -523,7 +457,6 @@ export function Accounts() {
       }
     },
     onItemDrop(e) {
-      // Dropping onto a subgroup node changes the account's subgroup
       if (e.target.dropPosition !== 'on') {
         return;
       }
@@ -536,7 +469,6 @@ export function Accounts() {
         return;
       }
 
-      // Dropping directly on a budget group clears the subgroup
       if (targetKey === ON_BUDGET_KEY || targetKey === OFF_BUDGET_KEY) {
         applyAccountSubgroupToItems(e.items, null);
       }
@@ -548,17 +480,11 @@ export function Accounts() {
       }
       const key = String(target.key);
 
-      // Allow dropping ON subgroups and budget groups (changes the
-      // account's subgroup or clears it).
       if (
         target.dropPosition === 'on' &&
         (isSubgroupKey(key) || key === ON_BUDGET_KEY || key === OFF_BUDGET_KEY)
       ) {
         const isTargetOffBudget = getIsOffBudgetForDropTargetKey(key);
-        // Validate cross-budget drops: prevent dropping an account from
-        // one budget group onto the opposite budget group or subgroup.
-        // The offbudget status is immutable via drag-and-drop, so show
-        // no drop indicator for invalid targets.
         if (isTargetOffBudget != null) {
           for (const draggedKey of draggedKeysRef.current) {
             const draggedKeyStr = String(draggedKey);
@@ -576,12 +502,10 @@ export function Accounts() {
         return 'move';
       }
 
-      // Allow reorder between subgroup siblings (before / after)
       if (isSubgroupKey(key) && target.dropPosition !== 'on') {
         return 'move';
       }
 
-      // Allow reorder between account siblings (before / after)
       const account = findAccountById(key);
       if (account && target.dropPosition !== 'on') {
         return 'move';
@@ -618,7 +542,6 @@ export function Accounts() {
           dragAndDropHooks={dragAndDropHooks}
           selectionMode="none"
           className={css({
-            // Remove default tree styling
             outline: 'none',
             padding: 0,
             margin: 0,
@@ -632,18 +555,11 @@ export function Accounts() {
               margin: 0,
               listStyle: 'none',
             },
-            // ── Drag-and-drop visual feedback ──
-            // Highlight a tree row when it is a valid "drop on" target
-            // (e.g. dropping an account onto a subgroup).
             '& [role="row"][data-drop-target]': {
               backgroundColor: theme.sidebarItemBackgroundHover,
               boxShadow: `inset 0 0 0 1px ${theme.sidebarItemAccentSelected}`,
               borderRadius: 4,
             },
-            // Between-item drop indicator line (before / after).
-            // react-aria renders DropIndicators as zero-height divs;
-            // reset all their default styling and only show a thin
-            // coloured line when they are the active drop target.
             '& .react-aria-DropIndicator': {
               outline: 'none',
               border: 'none',
@@ -659,7 +575,6 @@ export function Accounts() {
           })}
         >
           {function renderTreeItem(node: TreeNode) {
-            // Account leaf node
             if (node.account) {
               return (
                 <TreeItem key={node.id} id={node.id} textValue={node.name}>
@@ -683,7 +598,6 @@ export function Accounts() {
               );
             }
 
-            // Subgroup header — compact row with collapse/expand chevron.
             if (node.isSubgroup) {
               return (
                 <TreeItem key={node.id} id={node.id} textValue={node.name}>
@@ -715,7 +629,6 @@ export function Accounts() {
               );
             }
 
-            // Root "All Accounts" or budget group nodes
             const isRoot = node.id === ALL_ACCOUNTS_KEY;
             return (
               <TreeItem key={node.id} id={node.id} textValue={node.name}>

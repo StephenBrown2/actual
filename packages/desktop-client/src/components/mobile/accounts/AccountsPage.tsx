@@ -25,6 +25,7 @@ import { css } from '@emotion/css';
 import type { AccountEntity } from 'loot-core/types/models';
 
 import {
+  groupAccountsBySubgroup,
   useMoveAccountMutation,
   useSyncAndDownloadMutation,
 } from '@desktop-client/accounts';
@@ -504,12 +505,6 @@ const AccountList = forwardRef<HTMLDivElement, AccountListProps>(
 
 AccountList.displayName = 'AccountList';
 
-/**
- * Groups accounts by subgroup and renders separate AccountList sections
- * for each subgroup, with ungrouped accounts first.
- * Drag-and-drop reordering works within each rendered list. Group
- * assignment is managed from account edit flows and sidebar drag/drop.
- */
 type AccountListBySubgroupProps = {
   ariaLabel: string;
   accounts: AccountEntity[];
@@ -519,35 +514,6 @@ type AccountListBySubgroupProps = {
   onOpenAccount: (account: AccountEntity) => void;
 };
 
-function splitAccountsBySubgroup(accounts: AccountEntity[]): {
-  ungroupedAccounts: AccountEntity[];
-  subgroupEntries: Array<[string, AccountEntity[]]>;
-} {
-  // TODO: extract shared account-subgroup grouping utility with sidebar tree logic.
-  const ungroupedAccounts: AccountEntity[] = [];
-  const subgroupMap = new Map<string, AccountEntity[]>();
-
-  for (const account of accounts) {
-    if (!account.subgroup) {
-      ungroupedAccounts.push(account);
-      continue;
-    }
-
-    const groupedAccounts = subgroupMap.get(account.subgroup);
-    if (groupedAccounts) {
-      groupedAccounts.push(account);
-    } else {
-      subgroupMap.set(account.subgroup, [account]);
-    }
-  }
-
-  const subgroupEntries = [...subgroupMap.entries()].sort(([a], [b]) =>
-    a.localeCompare(b),
-  );
-
-  return { ungroupedAccounts, subgroupEntries };
-}
-
 function AccountListBySubgroup({
   ariaLabel,
   accounts,
@@ -555,7 +521,7 @@ function AccountListBySubgroup({
   onOpenAccount,
 }: AccountListBySubgroupProps) {
   const { ungroupedAccounts, subgroupEntries } = useMemo(
-    () => splitAccountsBySubgroup(accounts),
+    () => groupAccountsBySubgroup(accounts),
     [accounts],
   );
 

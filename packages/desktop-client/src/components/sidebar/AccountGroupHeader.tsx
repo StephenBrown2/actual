@@ -23,16 +23,6 @@ type AccountGroupHeaderProps<FieldName extends SheetFields<'account'>> = {
   onToggle: () => void;
 };
 
-/**
- * Budget group / root header with a chevron, navigable link, and
- * aggregate balance.
- *
- * The chevron calls `onToggle` to expand/collapse. Clicking the text
- * navigates to the aggregate account page. `onPointerDown`
- * propagation is stopped on the outer container so the tree-row press
- * handler never fires - this ensures that only the chevron controls
- * expansion.
- */
 export function AccountGroupHeader<FieldName extends SheetFields<'account'>>({
   name,
   to,
