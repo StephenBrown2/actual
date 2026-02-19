@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
 
 import type { AccountEntity } from 'loot-core/types/models';
@@ -144,35 +143,35 @@ vi.mock('@desktop-client/spreadsheet/bindings', () => ({
 }));
 
 function getGroupToggleButton(label: string): HTMLButtonElement {
-  const groupLabel = screen.getByText(label);
-  let current: HTMLElement | null = groupLabel.parentElement;
-  while (current) {
-    const button = current.querySelector(
-      'button[aria-label="Collapse"], button[aria-label="Expand"]',
-    );
-    if (button instanceof HTMLButtonElement) {
-      return button;
-    }
-    current = current.parentElement;
+  const groupRow = screen.getByRole('row', { name: label });
+  const button = groupRow.querySelector(
+    'button[aria-label="Collapse"]:not([slot="chevron"]), button[aria-label="Expand"]:not([slot="chevron"])',
+  );
+  if (button instanceof HTMLButtonElement) {
+    return button;
   }
   throw new Error(`Could not find toggle button for group: ${label}`);
+}
+
+function toggleGroup(label: string) {
+  const toggleButton = getGroupToggleButton(label);
+  fireEvent.click(toggleButton);
 }
 
 describe('Accounts sidebar expansion', () => {
   test('allows collapsing and expanding structural groups', async () => {
     render(<Accounts />, { wrapper: TestProviders });
-    const user = userEvent.setup();
 
     expect(screen.getByText('On Budget One')).toBeInTheDocument();
     expect(screen.getByText('Off Budget One')).toBeInTheDocument();
 
-    await user.click(getGroupToggleButton('On budget'));
+    toggleGroup('On budget');
     await waitFor(() => {
       expect(screen.queryByText('On Budget One')).not.toBeInTheDocument();
     });
     expect(screen.getByText('Off Budget One')).toBeInTheDocument();
 
-    await user.click(getGroupToggleButton('On budget'));
+    toggleGroup('On budget');
     await waitFor(() => {
       expect(screen.getByText('On Budget One')).toBeInTheDocument();
     });
@@ -180,19 +179,36 @@ describe('Accounts sidebar expansion', () => {
 
   test('does not toggle previously toggled sibling groups', async () => {
     render(<Accounts />, { wrapper: TestProviders });
-    const user = userEvent.setup();
 
-    await user.click(getGroupToggleButton('On budget'));
+    toggleGroup('On budget');
     await waitFor(() => {
       expect(screen.queryByText('On Budget One')).not.toBeInTheDocument();
     });
 
-    await user.click(getGroupToggleButton('Off budget'));
+    toggleGroup('Off budget');
     await waitFor(() => {
       expect(screen.queryByText('Off Budget One')).not.toBeInTheDocument();
     });
 
     expect(screen.queryByText('On Budget One')).not.toBeInTheDocument();
+
+    toggleGroup('Off budget');
+    await waitFor(() => {
+      expect(screen.getByText('Off Budget One')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('On Budget One')).not.toBeInTheDocument();
+
+    toggleGroup('Mortgage');
+    await waitFor(() => {
+      expect(screen.queryByText('Mortgage Account')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('Other Debt Account')).toBeInTheDocument();
+
+    toggleGroup('Mortgage');
+    await waitFor(() => {
+      expect(screen.getByText('Mortgage Account')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Other Debt Account')).toBeInTheDocument();
   });
 
   test('renders all subgroups in the test budget', () => {
