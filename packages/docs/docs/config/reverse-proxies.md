@@ -32,7 +32,7 @@ services:
       - '443:443'
 
   actual-server:
-    image: actualbudget/actual-server:latest
+    image: ghcr.io/stephenbrown2/actual-server:edge-alpine
     container_name: actual_server
     restart: unless-stopped
     volumes:
@@ -66,7 +66,7 @@ services:
       - '/var/run/docker.sock:/var/run/docker.sock'
 
   actual-server:
-    image: actualbudget/actual-server:latest
+    image: ghcr.io/stephenbrown2/actual-server:edge-alpine
     restart: unless-stopped
     labels:
       - 'traefik.enable=true'

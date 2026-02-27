@@ -5,25 +5,15 @@ sidebar_position: 2
 
 ## Hosting Actual on a home server with Docker
 
-Actual is also available as a Docker image ready to be run in your own custom environment. We publish the image both to [Docker Hub](https://hub.docker.com/r/actualbudget/actual-server) (as `actualbudget/actual-server`) and [GitHub's container registry](https://ghcr.io/actualbudget/actual) (as `ghcr.io/actualbudget/actual`). Actual should function the same when pulled from either registry, so you can choose whichever one you prefer.
+Actual is also available as a Docker image ready to be run in your own custom environment. This fork publishes the image to [GitHub's container registry](https://ghcr.io/stephenbrown2/actual-server) (as `ghcr.io/stephenbrown2/actual-server`).
 
 ## Docker Tags
 
 We publish a number of tags to the official repository now so that users who want to get the latest bleeding edge changes can do that without having to wait for the latest image to be updated. Details of the available tags are below.
 
-### `latest` Tag
+### `edge-alpine` Tag
 
-The `latest` tag points to the most recent official release of Actual. This is the recommended tag to use for most users.
-
-- `latest`
-- `latest-alpine` - Based on Alpine Linux, which is tiny so it's great for low powered devices.
-
-### `edge` Tag
-
-The `edge` tag is updated every time a commit is pushed to the `master` branch. While we welcome people to try it out, there may be more bugs than the official release (please report any you find!). If you choose to give this tag a try, make sure you keep backups of your budget in case something goes wrong.
-
-- `edge`
-- `edge-alpine` - Based on Alpine Linux, which is tiny so great for low powered devices.
+The `edge-alpine` tag is updated every time a commit is pushed to the `master` branch. It is based on Alpine Linux, which is tiny so it's great for low powered devices. While we welcome people to try it out, there may be more bugs than the official release (please report any you find!). If you choose to give this tag a try, make sure you keep backups of your budget in case something goes wrong.
 
 ## Launch container using Docker Compose
 
@@ -52,7 +42,7 @@ Pre-requisites: Docker
 Alternatively to using docker compose, you may also launch docker using this command. This command, as shown, will launch the latest stable build of Actual.
 
 ```bash
-$ docker run --pull=always --restart=unless-stopped -d -p 5006:5006 -v YOUR/PATH/TO/DATA:/data --name my_actual_budget actualbudget/actual-server:latest
+$ docker run --pull=always --restart=unless-stopped -d -p 5006:5006 -v YOUR/PATH/TO/DATA:/data --name my_actual_budget ghcr.io/stephenbrown2/actual-server:edge-alpine
 ```
 
 `--pull=always` -- always pulls the latest image
@@ -67,7 +57,7 @@ $ docker run --pull=always --restart=unless-stopped -d -p 5006:5006 -v YOUR/PATH
 
 `--name my_actual_budget` -- gives your new docker container a name (change this to whatever you want)
 
-`actualbudget/actual-server:latest` -- defines which image you want to pull and launch.
+`ghcr.io/stephenbrown2/actual-server:edge-alpine` -- defines which image you want to pull and launch.
 
 ### Update Docker container using docker command
 
@@ -80,7 +70,7 @@ $ docker container rm my_actual_budget
 ```
 
 ```bash
-$ docker run --pull=always --restart=unless-stopped -d -p 5006:5006 -v YOUR/PATH/TO/DATA:/data --name my_actual_budget actualbudget/actual-server:latest
+$ docker run --pull=always --restart=unless-stopped -d -p 5006:5006 -v YOUR/PATH/TO/DATA:/data --name my_actual_budget ghcr.io/stephenbrown2/actual-server:edge-alpine
 ```
 
 You can place all of these in a batch script for a 1 click or single command update.
