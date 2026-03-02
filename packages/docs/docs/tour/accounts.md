@@ -1,9 +1,27 @@
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 # The Account Register
 
 This view lets you manage your transactions for an account. Consult the [Accounts & Transaction](/docs/accounts/) section in
 the manual for detailed information on how to work with this view.
 
+<Tabs groupId="device">
+  <TabItem value="desktop" label="Desktop" default>
+
+The account register shows the list of transactions for the selected account. On desktop, the header includes the account name, balance, and actions (Import, Add New, Filter). The table shows date, payee, category, and amount columns.
+
 ![](/img/a-tour-of-actual/tour-account-register-overview.webp)
+
+  </TabItem>
+  <TabItem value="mobile" label="Mobile">
+
+On mobile, open the **Accounts** tab in the bottom navigation, then tap an account to open its register. The same transaction list and actions are available in a compact layout. Tap **Add** to add a transaction, or use the menu for filter and other options.
+
+![](/img/a-tour-of-actual/tour-account-register-overview-mobile.webp)
+
+  </TabItem>
+</Tabs>
 
 ## The Account Header
 

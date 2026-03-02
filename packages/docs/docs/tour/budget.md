@@ -1,9 +1,27 @@
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 # The Budget
 
 This view lets you manage your budget for various months. You'll find more information about how to do budgeting with Actual
 in the [Budgeting](/docs/budgeting/) part of this manual.
 
+<Tabs groupId="device">
+  <TabItem value="desktop" label="Desktop" default>
+
+The budget view shows category groups and monthly columns (Budgeted, Spent, Balance). Use the calendar icon to choose how many months to display and which months to show.
+
 ![](/img/a-tour-of-actual/tour-budget-overview.webp)
+
+  </TabItem>
+  <TabItem value="mobile" label="Mobile">
+
+On mobile, the **Budget** tab in the bottom navigation opens the budget. You see the same categories and amounts in a scrollable layout. Tap a category to expand or edit. Use the month selector at the top to change the displayed month.
+
+![](/img/a-tour-of-actual/tour-budget-overview-mobile.webp)
+
+  </TabItem>
+</Tabs>
 
 The number of months you can see at any one time is defined by the width of your screen.
 
@@ -40,8 +58,8 @@ When the top is minimized, you can still access the same functionality as when t
 ### Left side - category section
 
 The budget detail section lists all your categories and their grouping. The image below shows two expense category
-groups, _Really Important_ and _Daily Expenses_, along with the income categories. You can minimize a category group, as seen
-with _Daily expenses_.
+groups, _Usual Expenses_ and _Bills_, along with the income categories. You can collapse a category group, as seen
+with _Usual Expenses_.
 
 Clicking on the three vertical dots (in the yellow box) allows you to Toggle hidden categories or expand or collapse all category groups.
 

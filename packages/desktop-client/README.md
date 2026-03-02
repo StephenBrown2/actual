@@ -96,3 +96,30 @@ Run locally:
 ```sh
 E2E_START_URL=https://my-remote-server.com yarn vrt
 ```
+
+### Docs screenshots
+
+Docs screenshot tests capture app screenshots into `packages/docs/static/img/` for the documentation site. Use the same setup as E2E: run the app first, then run the tests with `E2E_START_URL` so Playwright does not start its own server (avoids timeout).
+
+**Without Docker** (app already running in another terminal):
+
+```sh
+# Terminal 1: start the app
+yarn start
+
+# Terminal 2: run docs screenshot tests (from repo root)
+E2E_START_URL=http://localhost:3001 DOC_SCREENSHOTS=1 yarn docs:screenshots
+```
+
+**With Docker** (same image as VRT; app must be running on host):
+
+```sh
+# Terminal 1: start the app
+yarn start
+
+# Terminal 2: from repo root
+yarn docs:screenshots:docker
+
+# Or with a custom URL
+yarn docs:screenshots:docker --e2e-start-url http://localhost:3001
+```

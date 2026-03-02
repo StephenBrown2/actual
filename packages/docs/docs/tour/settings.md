@@ -4,7 +4,7 @@ The settings screens in Actual provide you with a number of options for managing
 
 You can access the Settings screen by clicking the down arrow by your budget name or going to the sidebar and clicking More > Settings.
 
-![](/img/using-actual/settings-1.webp)
+![](/img/using-actual/settings.webp)
 
 ### Formatting
 

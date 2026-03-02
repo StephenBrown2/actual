@@ -1,3 +1,6 @@
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 # Tracking Budget
 
 ## What is the Tracking Budget
@@ -13,7 +16,20 @@ We, the Actual team, suggest that you try to use the **Envelope Budget** if you 
 
 The **Tracking Budget** feature can be enabled from the Settings page by clicking on "Switch to tracking budgeting".
 
-![](/img/tracking-budget-7.webp)
+<Tabs groupId="device">
+  <TabItem value="desktop" label="Desktop" default>
+
+![](/img/tracking-budget-settings.webp)
+
+  </TabItem>
+  <TabItem value="mobile" label="Mobile">
+
+On mobile, open **Settings** from the bottom navigation (or the **More** menu), then tap **Switch to tracking budgeting** to enable the Tracking Budget.
+
+![](/img/tracking-budget-settings-mobile.webp)
+
+  </TabItem>
+</Tabs>
 
 ## Creating a Budget
 

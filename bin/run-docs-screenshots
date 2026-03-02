@@ -1,0 +1,38 @@
+#!/bin/sh
+
+# Run docs screenshot tests against an already-running app (same pattern as run-vrt).
+# Start the app in a separate terminal first: yarn start
+# Then run: yarn docs:screenshots:docker
+# Or with a custom URL: yarn docs:screenshots:docker --e2e-start-url http://localhost:3001
+
+if [ ! -d "node_modules" ] || [ "$(ls -A node_modules)" = "" ]; then
+    yarn
+fi
+
+E2E_START_URL="${E2E_START_URL:-http://localhost:3001}"
+DOCS_ARGS=""
+
+# Loop through all arguments
+while [ $# -gt 0 ]; do
+    key="$1"
+    case $key in
+        --e2e-start-url)
+            E2E_START_URL="$2"
+            shift
+            ;;
+        *)
+            DOCS_ARGS="$DOCS_ARGS $1"
+            ;;
+    esac
+    shift
+done
+
+echo "Running docs screenshot tests with the following parameters:"
+echo "E2E_START_URL: $E2E_START_URL"
+echo "DOCS_ARGS: $DOCS_ARGS"
+echo ""
+echo "Ensure the app is already running (e.g. yarn start in another terminal)."
+echo ""
+
+MSYS_NO_PATHCONV=1 docker run --rm --network host -v "$(pwd)":/work/ -w /work/ -it mcr.microsoft.com/playwright:v1.58.2-jammy /bin/bash \
+  -c "E2E_START_URL=$E2E_START_URL DOC_SCREENSHOTS=1 yarn docs:screenshots $DOCS_ARGS"
