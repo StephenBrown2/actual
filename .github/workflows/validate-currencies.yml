@@ -1,0 +1,38 @@
+name: Validate Currencies
+
+on:
+  pull_request:
+    paths:
+      - 'packages/loot-core/src/shared/currencies.ts'
+      - 'packages/desktop-client/src/components/settings/Currency.tsx'
+      - '.github/scripts/validate-currencies.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Currency Data
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Run currency validation
+        run: node .github/scripts/validate-currencies.mjs
+
+      - name: Report validation results
+        if: failure()
+        run: |
+          echo "::error::Currency validation failed. Please check the logs above for details."
+          echo "Common issues:"
+          echo "  - Currencies not in alphabetical order by code"
+          echo "  - Missing translation entries in Currency.tsx"
+          echo "  - Metadata mismatch with LocalePlanet API (decimal places, symbol, name)"
+          echo "  - Incorrect symbol usage (when native symbol is $, use API symbol field)"
