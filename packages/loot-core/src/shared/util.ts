@@ -220,12 +220,15 @@ export function reapplyThousandSeparators(amountText: string) {
     return amountText;
   }
 
-  const { decimalSeparator, thousandsSeparator } = getNumberFormat();
+  const { decimalSeparator, thousandsSeparator, value } = getNumberFormat();
   const [integerPartRaw, decimalPart = ''] = amountText.split(decimalSeparator);
 
-  const numericValue = Number(
-    integerPartRaw.replaceAll(thousandsSeparator, ''),
-  );
+  // Apostrophe-dot: accept both U+2019 and keyboard U+0027 on input (see getNumberFormat formatter)
+  const stripThousands =
+    value === 'apostrophe-dot'
+      ? (s: string) => s.replaceAll(/[\u2019\u0027]/g, '')
+      : (s: string) => s.replaceAll(thousandsSeparator, '');
+  const numericValue = Number(stripThousands(integerPartRaw));
   if (isNaN(numericValue)) {
     return amountText; // Return original if parsing fails
   }
