@@ -68,6 +68,7 @@ test.describe('Onboarding', () => {
     const settingsPage = await navigation.goToSettingsPage();
     await settingsPage.disableExperimentalFeature('Currency support');
 
+    await navigation.goToAccountPage('Checking');
     await expect(accountPage.accountBalance).toHaveText('2,600.00');
 
     await navigation.goToAccountPage('Saving');

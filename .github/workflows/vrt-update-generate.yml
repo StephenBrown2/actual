@@ -69,6 +69,16 @@ jobs:
         with:
           download-translations: 'false'
 
+      # Web VRT: manifest under e2e/.vrt-manifest records expected PNGs; prune step removes orphans only.
+      - name: Prepare VRT snapshot manifest
+        run: rm -rf packages/desktop-client/e2e/.vrt-manifest
+
+      - name: Clear Electron VRT baselines
+        run: |
+          if [ -d packages/desktop-electron/e2e/__screenshots__ ]; then
+            find packages/desktop-electron/e2e/__screenshots__ -type f -name '*.png' -delete
+          fi
+
       - name: Run VRT Tests on Desktop app
         continue-on-error: true
         run: |
@@ -77,6 +87,9 @@ jobs:
       - name: Run VRT Tests
         continue-on-error: true
         run: yarn vrt --update-snapshots
+
+      - name: Prune orphaned web VRT snapshots
+        run: yarn vrt:prune
 
       - name: Create patch with PNG changes only
         id: create-patch
@@ -87,10 +100,18 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Stage only PNG files
-          git add "**/*.png"
+          # Stage VRT snapshot changes
+          git add --no-ignore-removal -- packages/desktop-client/e2e packages/desktop-electron/e2e
 
-          # Check if there are any changes
+          # Unstage non-PNG files (not included in VRT patch)
+          mapfile -t non_png < <(git diff --cached --name-only | grep -vE '\.png$' || true)
+          if [ "${#non_png[@]}" -gt 0 ]; then
+            echo "Unstaging non-PNG files (not included in VRT patch):"
+            printf '  %s\n' "${non_png[@]}"
+            git reset HEAD -- "${non_png[@]}"
+          fi
+
+          # Check if there are any real changes
           if git diff --staged --quiet; then
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
             echo "No VRT changes to commit"
