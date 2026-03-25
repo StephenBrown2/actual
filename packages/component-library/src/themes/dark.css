@@ -62,6 +62,7 @@
   --color-sidebarItemTextUpdated: var(--color-sidebarItemText);
   --color-sidebarItemTextSelected: var(--palette-purple200);
   --color-sidebarBudgetName: var(--palette-navy300);
+  --color-sidebarSubgroupHeaderText: var(--palette-navy300);
 
   --color-menuBackground: var(--palette-navy800);
   --color-menuItemBackground: var(--palette-navy800);

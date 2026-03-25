@@ -35,6 +35,7 @@
     "./themes/light.css": "./src/themes/light.css",
     "./themes/dark.css": "./src/themes/dark.css",
     "./themes/midnight.css": "./src/themes/midnight.css",
+    "./themes/notYnab.css": "./src/themes/notYnab.css",
     "./tokens": "./src/tokens.ts",
     "./toggle": "./src/Toggle.tsx",
     "./tooltip": "./src/Tooltip.tsx",

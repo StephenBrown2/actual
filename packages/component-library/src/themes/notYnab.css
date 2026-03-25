@@ -60,6 +60,7 @@
   --color-sidebarItemText: var(--palette-navy150);
   --color-sidebarItemTextSelected: var(--palette-purple200);
   --color-sidebarBudgetName: var(--palette-navy150);
+  --color-sidebarSubgroupHeaderText: var(--palette-navy300);
 
   --color-menuBackground: var(--palette-white);
   --color-menuItemBackground: var(--palette-navy50);

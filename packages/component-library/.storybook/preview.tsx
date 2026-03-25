@@ -5,12 +5,14 @@ import type { Preview } from '@storybook/react-vite';
 import darkThemeCss from '../src/themes/dark.css?inline';
 import lightThemeCss from '../src/themes/light.css?inline';
 import midnightThemeCss from '../src/themes/midnight.css?inline';
+import notYnabCss from '../src/themes/notYnab.css?inline';
 import paletteCss from '../src/themes/palette.css?inline';
 
 const THEMES = {
   light: lightThemeCss,
   dark: darkThemeCss,
   midnight: midnightThemeCss,
+  notYnab: notYnabCss,
 } as const;
 
 type ThemeName = keyof typeof THEMES;
@@ -58,6 +60,7 @@ const preview: Preview = {
           { value: 'light', title: 'Light' },
           { value: 'dark', title: 'Dark' },
           { value: 'midnight', title: 'Midnight' },
+          { value: 'notYnab', title: 'Not YNAB' },
         ],
       },
     },
