@@ -1023,13 +1023,17 @@ export async function prefetchBalanceOfForTransaction(
       literals.add(lit);
     }
   }
+
+  const balanceCache = new Map<string, number>();
   for (const literal of literals) {
     const accountId = resolveAccountIdForBalanceOf(literal, accountsMap);
     if (accountId) {
-      map.set(
-        literal,
-        await getRunningBalanceBeforeTransaction(trans, accountId),
-      );
+      let balance = balanceCache.get(accountId);
+      if (balance === undefined) {
+        balance = await getRunningBalanceBeforeTransaction(trans, accountId);
+        balanceCache.set(accountId, balance);
+      }
+      map.set(literal, balance);
     } else {
       map.set(literal, 0);
     }

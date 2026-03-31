@@ -38,6 +38,9 @@ async function createScheduleList(
   const t: Array<ScheduleTemplateTarget> = [];
   const errors: string[] = [];
 
+  const accounts = (await db.getAccounts()) ?? [];
+  const accountsMap = new Map(accounts.map(a => [a.id, a]));
+
   for (const template of templates) {
     const { id: sid, completed } = await db.first<
       Pick<db.DbSchedule, 'id' | 'completed'>
@@ -81,8 +84,6 @@ async function createScheduleList(
       monthUtils._parse(current_month),
     );
 
-    const accounts = (await db.getAccounts()) ?? [];
-    const accountsMap = new Map(accounts.map(a => [a.id, a]));
     const scheduleRuleContext: TransactionEntity = {
       amount: scheduleAmount,
       category: category.id,
