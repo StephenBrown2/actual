@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
+import {
+  decodeBalanceOfQuotedLiteral,
+  findBalanceOfTwoArgCalls,
+  findBalanceOnCalls,
+} from '../../shared/balanceOfFormulaParse';
 import type * as db from '../db';
 
 import {
-  decodeBalanceOfQuotedLiteral,
   extractBalanceOfLiterals,
   resolveAccountIdForBalanceOf,
   substituteBalanceOfLiterals,
@@ -18,6 +22,45 @@ describe('balanceOfFormula', () => {
     ).toEqual(['Checking']);
     expect(extractBalanceOfLiterals('=balance_of("Savings")')).toEqual([
       'Savings',
+    ]);
+  });
+
+  it('extractBalanceOfLiterals ignores two-arg BALANCE_OF', () => {
+    expect(
+      extractBalanceOfLiterals(
+        '=BALANCE_OF("Checking", "2026-01-01") + BALANCE_OF("Other")',
+      ),
+    ).toEqual(['Other']);
+  });
+
+  it('findBalanceOfTwoArgCalls parses account and date expression', () => {
+    expect(
+      findBalanceOfTwoArgCalls('=BALANCE_OF("Checking", "2026-01-15") + 1'),
+    ).toEqual([
+      {
+        start: 1,
+        end: 37,
+        accountInner: 'Checking',
+        dateExpr: '"2026-01-15"',
+      },
+    ]);
+    expect(
+      findBalanceOfTwoArgCalls('=BALANCE_OF("id-here", DATE(2026,1,15))'),
+    ).toMatchObject([
+      {
+        accountInner: 'id-here',
+        dateExpr: 'DATE(2026,1,15)',
+      },
+    ]);
+  });
+
+  it('findBalanceOnCalls parses date expression', () => {
+    expect(findBalanceOnCalls('=BALANCE_ON(date) + 2')).toEqual([
+      {
+        start: 1,
+        end: 17,
+        dateExpr: 'date',
+      },
     ]);
   });
 

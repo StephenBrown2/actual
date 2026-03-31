@@ -1,6 +1,7 @@
 // @ts-strict-ignore
 
 import { logger } from '../../platform/server/log';
+import { decodeBalanceOfQuotedLiteral } from '../../shared/balanceOfFormulaParse';
 import {
   addDays,
   currentDay,
@@ -42,8 +43,11 @@ import {
 import {
   collectFormulasFromActions,
   extractBalanceOfLiterals,
+  findBalanceOfTwoArgCalls,
+  findBalanceOnCalls,
   resolveAccountIdForBalanceOf,
 } from '../rules/balanceOfFormula';
+import { evaluateRuleExpressionToIsoDate } from '../rules/ruleFormulaExpr';
 import { addSyncListener, batchMessages } from '../sync';
 
 import { batchUpdateTransactions } from '.';
@@ -353,11 +357,14 @@ export async function runRules(
   const formulaStrings = rules.flatMap(rule =>
     collectFormulasFromActions(rule.actions),
   );
-  finalTrans._balanceOfPrefetched = await prefetchBalanceOfForTransaction(
+  const balancePrefetch = await prefetchBalanceOfForTransaction(
     finalTrans,
     accountsMap,
     formulaStrings,
   );
+  finalTrans._balanceOfPrefetched = balancePrefetch.oneArgMap;
+  finalTrans._balanceDatedFormulaSubstitutions =
+    balancePrefetch.datedSubstitutionsByFormula;
 
   for (let i = 0; i < rules.length; i++) {
     // If there is a scheduleRuleID (meaning this transaction came from a schedule) then exclude rules linked to other schedules.
@@ -725,7 +732,9 @@ export async function applyActions(
     ),
   );
   transactionsForRules.forEach((trans, i) => {
-    trans._balanceOfPrefetched = balanceOfPrefetchResults[i];
+    trans._balanceOfPrefetched = balanceOfPrefetchResults[i].oneArgMap;
+    trans._balanceDatedFormulaSubstitutions =
+      balanceOfPrefetchResults[i].datedSubstitutionsByFormula;
   });
 
   const updated = transactionsForRules.flatMap(trans => {
@@ -964,6 +973,8 @@ export type TransactionForRules = TransactionEntity & {
   parent_amount?: number;
   /** Prefetched cent balances for BALANCE_OF("…") in rule formulas; cleared in finalize */
   _balanceOfPrefetched?: Map<string, number>;
+  /** Original formula → formula with BALANCE_ON / two-arg BALANCE_OF replaced by cent literals */
+  _balanceDatedFormulaSubstitutions?: Map<string, string>;
 };
 
 /**
@@ -1011,12 +1022,114 @@ export async function getRunningBalanceBeforeTransaction(
   return balance ?? 0;
 }
 
+/**
+ * Sum of non-parent transaction amounts for `accountId` with date <= `dateYyyyMmDd` (inclusive).
+ */
+export async function getBalanceOnOrBeforeDate(
+  accountId: string,
+  dateYyyyMmDd: string,
+): Promise<number> {
+  const { data: balance } = await aqlQuery(
+    q('transactions')
+      .filter({ account: accountId, is_parent: false })
+      .filter({ date: { $lte: dateYyyyMmDd } })
+      .options({ splits: 'inline' })
+      .calculate({ $sum: '$amount' }),
+  );
+  return balance ?? 0;
+}
+
+export type BalanceOfPrefetchResult = {
+  oneArgMap: Map<string, number>;
+  datedSubstitutionsByFormula: Map<string, string>;
+};
+
+async function substituteDatedBalanceCallsInFormula(
+  formula: string,
+  trans: TransactionEntity,
+  accountsMap: Map<string, db.DbAccount>,
+): Promise<string> {
+  const ctx = trans as Partial<TransactionForRules>;
+  let working = formula;
+
+  const balanceOnMatches = findBalanceOnCalls(working);
+  const balanceOfTwoMatches = findBalanceOfTwoArgCalls(working);
+
+  type Tagged =
+    | { start: number; end: number; type: 'on'; dateExpr: string }
+    | {
+        start: number;
+        end: number;
+        type: 'of2';
+        dateExpr: string;
+        accountInner: string;
+      };
+
+  const allMatches: Tagged[] = [
+    ...balanceOnMatches.map(m => ({
+      start: m.start,
+      end: m.end,
+      type: 'on' as const,
+      dateExpr: m.dateExpr,
+    })),
+    ...balanceOfTwoMatches.map(m => ({
+      start: m.start,
+      end: m.end,
+      type: 'of2' as const,
+      dateExpr: m.dateExpr,
+      accountInner: m.accountInner,
+    })),
+  ];
+
+  allMatches.sort((a, b) => b.start - a.start);
+
+  for (const m of allMatches) {
+    const iso = evaluateRuleExpressionToIsoDate(m.dateExpr, ctx);
+    let cents = 0;
+    if (iso) {
+      if (m.type === 'on') {
+        if (trans.account) {
+          cents = await getBalanceOnOrBeforeDate(trans.account, iso);
+        }
+      } else {
+        const accountLiteral = decodeBalanceOfQuotedLiteral(m.accountInner);
+        const accountId = resolveAccountIdForBalanceOf(
+          accountLiteral,
+          accountsMap,
+        );
+        if (accountId) {
+          cents = await getBalanceOnOrBeforeDate(accountId, iso);
+        }
+      }
+    }
+    working = working.slice(0, m.start) + String(cents) + working.slice(m.end);
+  }
+
+  return working;
+}
+
 export async function prefetchBalanceOfForTransaction(
   trans: TransactionEntity,
   accountsMap: Map<string, db.DbAccount>,
   formulas: string[],
-): Promise<Map<string, number>> {
-  const map = new Map<string, number>();
+): Promise<BalanceOfPrefetchResult> {
+  const datedSubstitutionsByFormula = new Map<string, string>();
+  const uniqueFormulas = [...new Set(formulas)];
+
+  for (const f of uniqueFormulas) {
+    if (
+      findBalanceOnCalls(f).length === 0 &&
+      findBalanceOfTwoArgCalls(f).length === 0
+    ) {
+      continue;
+    }
+    datedSubstitutionsByFormula.set(
+      f,
+      await substituteDatedBalanceCallsInFormula(f, trans, accountsMap),
+    );
+  }
+
+  const oneArgMap = new Map<string, number>();
   const literals = new Set<string>();
   for (const f of formulas) {
     for (const lit of extractBalanceOfLiterals(f)) {
@@ -1033,12 +1146,12 @@ export async function prefetchBalanceOfForTransaction(
         balance = await getRunningBalanceBeforeTransaction(trans, accountId);
         balanceCache.set(accountId, balance);
       }
-      map.set(literal, balance);
+      oneArgMap.set(literal, balance);
     } else {
-      map.set(literal, 0);
+      oneArgMap.set(literal, 0);
     }
   }
-  return map;
+  return { oneArgMap, datedSubstitutionsByFormula };
 }
 
 export async function prepareTransactionForRules(
@@ -1105,6 +1218,10 @@ export async function finalizeTransactionForRules(
     delete trans._balanceOfPrefetched;
   }
 
+  if ('_balanceDatedFormulaSubstitutions' in trans) {
+    delete trans._balanceDatedFormulaSubstitutions;
+  }
+
   if ('parent_amount' in trans) {
     delete trans.parent_amount;
   }
@@ -1117,6 +1234,10 @@ export async function finalizeTransactionForRules(
 
       if ('_balanceOfPrefetched' in stx) {
         delete stx._balanceOfPrefetched;
+      }
+
+      if ('_balanceDatedFormulaSubstitutions' in stx) {
+        delete stx._balanceDatedFormulaSubstitutions;
       }
 
       if ('parent_amount' in stx) {

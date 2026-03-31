@@ -28,6 +28,22 @@ export const queryModeFunctions: Record<string, FunctionDef> = {
     description: t('Returns the average, including text and logical values.'),
     parameters: [{ name: 'values', description: 'Value1, Value2, ...ValueN' }],
   },
+  BALANCE_OF: {
+    name: 'BALANCE_OF',
+    description: t(
+      'Balance for an account (in cents) as of a calendar date (inclusive). Pass a quoted account id or exact account name and a date expression.',
+    ),
+    parameters: [
+      {
+        name: 'account_id_or_name',
+        description: t('Quoted account id or exact account name'),
+      },
+      {
+        name: 'dateExpr',
+        description: t('Date expression resolving to YYYY-MM-DD'),
+      },
+    ],
+  },
   COUNT: {
     name: 'COUNT',
     description: t('Counts the number of numeric values.'),

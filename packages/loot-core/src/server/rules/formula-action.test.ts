@@ -146,6 +146,49 @@ describe('Formula-based rule actions', () => {
     expect(result).toBe(0);
   });
 
+  it('should apply _balanceDatedFormulaSubstitutions before one-arg BALANCE_OF', () => {
+    const action = new Action('set', 'amount', null, {});
+    const formula =
+      '=BALANCE_OF("Savings", "2026-01-01") + BALANCE_OF("Other")';
+    const transaction: Partial<TransactionForRules> = {
+      amount: 100,
+      _balanceDatedFormulaSubstitutions: new Map([
+        [formula, '=50000 + BALANCE_OF("Other")'],
+      ]),
+      _balanceOfPrefetched: new Map([['Other', 3000]]),
+    };
+    const result = action.executeFormulaSync(formula, transaction);
+    expect(result).toBe(5300000);
+  });
+
+  it('should apply BALANCE_ON via _balanceDatedFormulaSubstitutions', () => {
+    const action = new Action('set', 'notes', null, {});
+    const formula = '=BALANCE_ON("2026-06-01") + BALANCE_OF("Savings")';
+    const transaction: Partial<TransactionForRules> = {
+      notes: 'x',
+      _balanceDatedFormulaSubstitutions: new Map([
+        [formula, '=77700 + BALANCE_OF("Savings")'],
+      ]),
+      _balanceOfPrefetched: new Map([['Savings', 100]]),
+    };
+    const result = action.executeFormulaSync(formula, transaction);
+    expect(result).toBe(7780000);
+  });
+
+  it('should combine two-arg BALANCE_OF substitution with one-arg in same formula', () => {
+    const action = new Action('set', 'amount', null, {});
+    const formula = '=BALANCE_OF("Card", "2025-12-31") - BALANCE_OF("Card")';
+    const transaction: Partial<TransactionForRules> = {
+      amount: 100,
+      _balanceDatedFormulaSubstitutions: new Map([
+        [formula, '=200000 - BALANCE_OF("Card")'],
+      ]),
+      _balanceOfPrefetched: new Map([['Card', 50000]]),
+    };
+    const result = action.executeFormulaSync(formula, transaction);
+    expect(result).toBe(15000000);
+  });
+
   it('should execute formula and convert to number type', () => {
     const action = new Action('set', 'amount', null, {
       formula: '=500 + 250',

@@ -1,4 +1,22 @@
+import {
+  decodeBalanceOfQuotedLiteral,
+  findBalanceOfTwoArgCalls,
+  findBalanceOnCalls,
+  parseExpressionUntilMatchingCloseParen,
+} from '../../shared/balanceOfFormulaParse';
+import type {
+  BalanceOfTwoArgMatch,
+  BalanceOnMatch,
+} from '../../shared/balanceOfFormulaParse';
 import type * as db from '../db';
+
+export {
+  findBalanceOfTwoArgCalls,
+  findBalanceOnCalls,
+  parseExpressionUntilMatchingCloseParen,
+  type BalanceOfTwoArgMatch,
+  type BalanceOnMatch,
+};
 
 /** Collect formula strings from serialized or live rule actions. */
 export function collectFormulasFromActions(
@@ -12,11 +30,6 @@ export function collectFormulasFromActions(
     }
   }
   return out;
-}
-
-/** Decode escape sequences inside a double-quoted formula string literal. */
-export function decodeBalanceOfQuotedLiteral(inner: string): string {
-  return inner.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
 }
 
 /**

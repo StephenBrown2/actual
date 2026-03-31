@@ -3,11 +3,17 @@ import { useEffect, useState } from 'react';
 import { HyperFormula } from 'hyperformula';
 
 import { send } from 'loot-core/platform/client/connection';
+import {
+  decodeBalanceOfQuotedLiteral,
+  findBalanceOfTwoArgCalls,
+} from 'loot-core/shared/balanceOfFormulaParse';
+import { evaluateFormulaExpressionToIsoDate } from 'loot-core/shared/formulaExpressionDate';
 import * as monthUtils from 'loot-core/shared/months';
 import { q } from 'loot-core/shared/query';
 import type { Query } from 'loot-core/shared/query';
 import { integerToAmount } from 'loot-core/shared/util';
 import type {
+  AccountEntity,
   CategoryEntity,
   RuleConditionEntity,
   TimeFrame,
@@ -28,6 +34,16 @@ type QueriesMap = Record<string, QueryConfig>;
 
 function escapeRegExp(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function resolveAccountIdForFormulaCard(
+  literal: string,
+  accounts: AccountEntity[],
+): string | null {
+  if (accounts.some(a => a.id === literal)) {
+    return literal;
+  }
+  return accounts.find(a => a.name === literal)?.id ?? null;
 }
 
 // Parse a BUDGET_QUERY parameter - can be extraction function, array literal, or string
@@ -321,6 +337,38 @@ export function useFormulaExecution(
                 replacement,
               );
             }
+          }
+        }
+
+        const twoArgBalance = findBalanceOfTwoArgCalls(processedFormula);
+        if (twoArgBalance.length > 0) {
+          const accounts = (await send('accounts-get')) as AccountEntity[];
+          const namedForDate: Record<string, unknown> = {
+            ...(namedExpressions ?? {}),
+          };
+          const sorted = [...twoArgBalance].sort((a, b) => b.start - a.start);
+          for (const m of sorted) {
+            const iso = evaluateFormulaExpressionToIsoDate(
+              m.dateExpr,
+              namedForDate,
+              { today: monthUtils.currentDay() },
+            );
+            const literal = decodeBalanceOfQuotedLiteral(m.accountInner);
+            const accountId = resolveAccountIdForFormulaCard(literal, accounts);
+            let cents = 0;
+            if (iso && accountId) {
+              const summedQuery = q('transactions')
+                .filter({ account: accountId, is_parent: false })
+                .filter({ date: { $lte: iso } })
+                .options({ splits: 'inline' })
+                .calculate({ $sum: '$amount' });
+              const { data } = await send('query', summedQuery.serialize());
+              cents = data ?? 0;
+            }
+            processedFormula =
+              processedFormula.slice(0, m.start) +
+              String(cents) +
+              processedFormula.slice(m.end);
           }
         }
 

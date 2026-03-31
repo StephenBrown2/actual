@@ -29,7 +29,10 @@ describe('runSchedule', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(db.getAccounts).mockResolvedValue([]);
-    vi.mocked(prefetchBalanceOfForTransaction).mockResolvedValue(new Map());
+    vi.mocked(prefetchBalanceOfForTransaction).mockResolvedValue({
+      oneArgMap: new Map(),
+      datedSubstitutionsByFormula: new Map(),
+    });
   });
 
   it('should return correct budget when recurring schedule set', async () => {
@@ -115,8 +118,11 @@ describe('runSchedule', () => {
   it('passes _balanceOfPrefetched from prefetch into rule.execActions when formula uses BALANCE_OF', async () => {
     const execSpy = vi.spyOn(Rule.prototype, 'execActions');
     try {
-      const prefetched = new Map<string, number>([['Checking', 42]]);
-      vi.mocked(prefetchBalanceOfForTransaction).mockResolvedValue(prefetched);
+      const oneArgMap = new Map<string, number>([['Checking', 42]]);
+      vi.mocked(prefetchBalanceOfForTransaction).mockResolvedValue({
+        oneArgMap,
+        datedSubstitutionsByFormula: new Map(),
+      });
       vi.mocked(db.getAccounts).mockResolvedValue([
         { id: 'acc-1', name: 'Checking', offbudget: 0 } as db.DbAccount,
       ]);
@@ -208,7 +214,7 @@ describe('runSchedule', () => {
       const execContext = execSpy.mock.calls[0][0] as {
         _balanceOfPrefetched?: Map<string, number>;
       };
-      expect(execContext._balanceOfPrefetched).toBe(prefetched);
+      expect(execContext._balanceOfPrefetched).toBe(oneArgMap);
       expect(execContext._balanceOfPrefetched?.get('Checking')).toBe(42);
     } finally {
       execSpy.mockRestore();

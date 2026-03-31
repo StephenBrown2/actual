@@ -325,7 +325,10 @@ export class Action {
       };
 
       for (const key of Object.keys(fieldValues)) {
-        if (key === '_balanceOfPrefetched') {
+        if (
+          key === '_balanceOfPrefetched' ||
+          key === '_balanceDatedFormulaSubstitutions'
+        ) {
           continue;
         }
         let cellValue: string | number | boolean;
@@ -341,8 +344,11 @@ export class Action {
         hfInstance.addNamedExpression(key, cellValue);
       }
 
+      const formulaAfterDated =
+        transaction._balanceDatedFormulaSubstitutions?.get(formula) ?? formula;
+
       const evaluatedFormula = substituteBalanceOfLiterals(
-        formula,
+        formulaAfterDated,
         transaction._balanceOfPrefetched,
       );
 

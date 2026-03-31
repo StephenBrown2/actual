@@ -49,6 +49,10 @@ function execSplitActions(actions: Action[], transaction) {
       newTransactions[splitTransactionIndex]._balanceOfPrefetched =
         transaction._balanceOfPrefetched;
     }
+    if (transaction._balanceDatedFormulaSubstitutions) {
+      newTransactions[splitTransactionIndex]._balanceDatedFormulaSubstitutions =
+        transaction._balanceDatedFormulaSubstitutions;
+    }
     action.exec(newTransactions[splitTransactionIndex]);
   });
 

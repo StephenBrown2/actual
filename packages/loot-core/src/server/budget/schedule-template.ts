@@ -101,7 +101,9 @@ async function createScheduleList(
 
     const { amount: postRuleAmount, subtransactions } = rule.execActions({
       ...scheduleRuleContext,
-      _balanceOfPrefetched: balanceOfPrefetched,
+      _balanceOfPrefetched: balanceOfPrefetched.oneArgMap,
+      _balanceDatedFormulaSubstitutions:
+        balanceOfPrefetched.datedSubstitutionsByFormula,
     });
     const categorySubtransactions = subtransactions?.filter(
       t => t.category === category.id,

@@ -61,12 +61,30 @@ export const transactionModeFunctions: Record<string, FunctionDef> = {
   BALANCE_OF: {
     name: 'BALANCE_OF',
     description: t(
-      'Running balance for another account (cents) at this transaction, same cutoff as balance. Use a quoted account id for a deterministic match, or a quoted account name. Use the balance variable instead for the current account.',
+      'Running balance for another account (cents). One argument: same cutoff as balance at this transaction. Two arguments: balance as of end of date (inclusive). Use a quoted account id or exact account name.',
     ),
     parameters: [
       {
         name: 'account_id_or_name',
         description: t('Quoted account id or exact account name'),
+      },
+      {
+        name: 'dateExpr',
+        description: t(
+          'Optional. Date expression for YYYY-MM-DD (end-of-day inclusive balance)',
+        ),
+      },
+    ],
+  },
+  BALANCE_ON: {
+    name: 'BALANCE_ON',
+    description: t(
+      'Balance of the current transaction account (cents) as of end of date (inclusive). Rules only.',
+    ),
+    parameters: [
+      {
+        name: 'dateExpr',
+        description: t('Date expression resolving to YYYY-MM-DD'),
       },
     ],
   },
