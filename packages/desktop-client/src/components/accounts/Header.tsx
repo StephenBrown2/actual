@@ -51,6 +51,7 @@ import { useSyncedPref } from '#hooks/useSyncedPref';
 import { useSyncServerStatus } from '#hooks/useSyncServerStatus';
 
 import type { TableRef } from './Account';
+import { AccountIcon } from './AccountIcon';
 import { Balances } from './Balance';
 import { BalanceHistoryGraph } from './BalanceHistoryGraph';
 import { ReconcileMenu, ReconcilingMessage } from './Reconcile';
@@ -672,6 +673,7 @@ function AccountNameField({
             },
           }}
         >
+          <AccountIcon account={account} size={24} />
           <View
             style={{
               fontSize: 25,

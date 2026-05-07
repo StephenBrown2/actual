@@ -152,6 +152,7 @@ export type Modal =
           country: string;
           maxConsentValidity?: number;
           psuType?: 'personal' | 'business';
+          logo?: string;
           onStateReady?: (state: string) => void;
         }) => Promise<
           | { error: 'timeout' }
@@ -371,6 +372,14 @@ export type Modal =
         onReconcile?: () => void;
         onToggleRunningBalance?: () => void;
         onToggleReconciled?: () => void;
+        onEditIcon?: () => void;
+      };
+    }
+  | {
+      name: 'account-icon-picker';
+      options: {
+        accountId: AccountEntity['id'];
+        onClose?: () => void;
       };
     }
   | {

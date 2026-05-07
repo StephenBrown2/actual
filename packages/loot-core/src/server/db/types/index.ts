@@ -36,6 +36,8 @@ export type DbAccount = {
     | 'timed-out'
     | 'account-missing'
     | null;
+  website?: string | null;
+  icon?: string | null;
 };
 
 export type DbAccountSubgroup = {
@@ -50,6 +52,8 @@ export type DbBank = {
   bank_id: string;
   name: string | null;
   tombstone: 1 | 0;
+  website?: string | null;
+  icon?: string | null;
 };
 
 export type DbCategory = {

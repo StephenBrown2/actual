@@ -725,9 +725,18 @@ export function getAccounts() {
       bankName: DbBank['name'];
       bankId: DbBank['id'];
       subgroup_sort_order: DbAccountSubgroup['sort_order'] | null;
+      bankIcon: DbBank['icon'] | null;
+      bankWebsite: DbBank['website'] | null;
     }
   >(
-    `SELECT a.*, asg.name as subgroup, asg.sort_order as subgroup_sort_order, b.name as bankName, b.id as bankId FROM accounts a
+    `SELECT a.*,
+            asg.name as subgroup,
+            asg.sort_order as subgroup_sort_order,
+            b.name as bankName,
+            b.id as bankId,
+            b.icon as bankIcon,
+            b.website as bankWebsite
+       FROM accounts a
        LEFT JOIN account_subgroups asg ON a.subgroup = asg.id AND asg.tombstone = 0
        LEFT JOIN banks b ON a.bank = b.id
        WHERE a.tombstone = 0

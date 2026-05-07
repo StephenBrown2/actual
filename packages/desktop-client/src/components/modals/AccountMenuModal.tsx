@@ -7,6 +7,7 @@ import {
   SvgClose,
   SvgDotsHorizontalTriple,
   SvgLockOpen,
+  SvgPhoto,
 } from '@actual-app/components/icons/v1';
 import { SvgLockClosed, SvgNotesPaper } from '@actual-app/components/icons/v2';
 import { InlineField } from '@actual-app/components/inline-field';
@@ -47,6 +48,7 @@ export function AccountMenuModal({
   onReconcile,
   onToggleRunningBalance,
   onToggleReconciled,
+  onEditIcon,
 }: AccountMenuModalProps) {
   const { t } = useTranslation();
   const account = useAccount(accountId);
@@ -214,6 +216,10 @@ export function AccountMenuModal({
                   <Trans>Reconcile</Trans>
                 </Button>
               )}
+              <Button style={buttonStyle} onPress={() => onEditIcon?.()}>
+                <SvgPhoto width={20} height={20} style={{ paddingRight: 5 }} />
+                <Trans>Edit icon</Trans>
+              </Button>
             </View>
           </View>
         </>

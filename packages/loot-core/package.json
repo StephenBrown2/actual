@@ -36,6 +36,10 @@
       "api": "./src/platform/server/connection/index.api.ts",
       "default": "./src/platform/server/connection/index.ts"
     },
+    "#platform/server/favicon-direct": {
+      "electron": "./src/platform/server/favicon-direct/index.electron.ts",
+      "default": "./src/platform/server/favicon-direct/index.ts"
+    },
     "#platform/server/fetch": {
       "electron": "./src/platform/server/fetch/index.electron.ts",
       "api": "./src/platform/server/fetch/index.api.ts",
@@ -146,6 +150,10 @@
       "api": "./src/platform/server/connection/index.api.ts",
       "default": "./src/platform/server/connection/index.ts"
     },
+    "./platform/server/favicon-direct": {
+      "electron": "./src/platform/server/favicon-direct/index.electron.ts",
+      "default": "./src/platform/server/favicon-direct/index.ts"
+    },
     "./platform/server/fetch": {
       "electron": "./src/platform/server/fetch/index.electron.ts",
       "api": "./src/platform/server/fetch/index.api.ts",
@@ -199,6 +207,7 @@
     "@jlongster/sql.js": "^1.6.7",
     "@rschedule/core": "^1.5.0",
     "@rschedule/standard-date-adapter": "^1.5.0",
+    "@silvia-odwyer/photon-node": "^0.3.4",
     "absurd-sql": "0.0.54",
     "better-sqlite3": "^12.11.1",
     "csv-parse": "^7.0.1",

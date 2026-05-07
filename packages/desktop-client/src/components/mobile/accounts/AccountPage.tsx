@@ -13,6 +13,7 @@ import type { AccountEntity } from '@actual-app/core/types/models';
 
 import { useReopenAccountMutation, useUpdateAccountMutation } from '#accounts';
 import { isAccountFailedSync } from '#accounts/syncStatus';
+import { AccountIcon } from '#components/accounts/AccountIcon';
 import { MobileBackButton } from '#components/mobile/MobileBackButton';
 import { AddTransactionButton } from '#components/mobile/transactions/AddTransactionButton';
 import { MobilePageHeader, Page } from '#components/Page';
@@ -190,7 +191,18 @@ function AccountHeader({ account }: { readonly account: AccountEntity }) {
     );
   }, [hideReconciled, setHideReconciled, dispatch]);
 
-  const onClick = useCallback(() => {
+  const onEditIcon = () => {
+    dispatch(
+      pushModal({
+        modal: {
+          name: 'account-icon-picker',
+          options: { accountId: account.id },
+        },
+      }),
+    );
+  };
+
+  const onClick = () => {
     dispatch(
       pushModal({
         modal: {
@@ -204,21 +216,12 @@ function AccountHeader({ account }: { readonly account: AccountEntity }) {
             onReconcile,
             onToggleRunningBalance,
             onToggleReconciled,
+            onEditIcon,
           },
         },
       }),
     );
-  }, [
-    account.id,
-    dispatch,
-    onCloseAccount,
-    onEditNotes,
-    onReconcile,
-    onReopenAccount,
-    onSave,
-    onToggleRunningBalance,
-    onToggleReconciled,
-  ]);
+  };
 
   return (
     <View
@@ -244,6 +247,7 @@ function AccountHeader({ account }: { readonly account: AccountEntity }) {
           }}
         />
       )}
+      <AccountIcon account={account} size={20} />
       <Button variant="bare" onPress={onClick}>
         <Text
           style={{

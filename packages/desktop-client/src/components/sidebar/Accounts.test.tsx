@@ -31,8 +31,6 @@ function makeAccount({
     tombstone: 0,
     account_id: null,
     bank: null,
-    bankName: null,
-    bankId: null,
     mask: null,
     official_name: null,
     balance_current: null,
@@ -40,6 +38,8 @@ function makeAccount({
     balance_limit: null,
     account_sync_source: null,
     last_sync: null,
+    website: null,
+    icon: null,
   };
 }
 

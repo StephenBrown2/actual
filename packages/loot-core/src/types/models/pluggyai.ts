@@ -1,20 +1,17 @@
-export type PluggyAiOrganization = {
-  name: string;
-  domain: string;
-};
-
-export type PluggyAiAccount = {
-  id: string;
-  name: string;
-  org: PluggyAiOrganization;
+/** Subset of Pluggy Item `connector` merged onto accounts by the sync-server. */
+export type PluggyAiConnector = {
+  name?: string;
+  imageUrl?: string;
+  institutionUrl?: string;
 };
 
 export type SyncServerPluggyAiAccount = {
   balance: number;
   account_id: string;
   institution?: string;
-  orgDomain?: string | null;
   orgId?: string;
   name: string;
   subtype?: string | null;
+  connectorImageUrl?: string;
+  connectorWebsite?: string;
 };

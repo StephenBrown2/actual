@@ -22,6 +22,7 @@ import type { AccountEntity } from '@actual-app/core/types/models';
 import { css, cx } from '@emotion/css';
 
 import { useReopenAccountMutation, useUpdateAccountMutation } from '#accounts';
+import { AccountIcon } from '#components/accounts/AccountIcon';
 import { BalanceHistoryGraph } from '#components/accounts/BalanceHistoryGraph';
 import { AccountSubgroupAutocomplete } from '#components/autocomplete/AccountSubgroupAutocomplete';
 import { Link } from '#components/common/Link';
@@ -34,7 +35,7 @@ import { useDragRef } from '#hooks/useDragRef';
 import { useIsTestEnv } from '#hooks/useIsTestEnv';
 import { useNotes } from '#hooks/useNotes';
 import { useSyncedPref } from '#hooks/useSyncedPref';
-import { openAccountCloseModal } from '#modals/modalsSlice';
+import { openAccountCloseModal, pushModal } from '#modals/modalsSlice';
 import { useDispatch, useSelector } from '#redux';
 import type { Binding, SheetFields } from '#spreadsheet';
 
@@ -126,6 +127,7 @@ export function Account<FieldName extends SheetFields<'account'>>({
     window.matchMedia('(hover: none)').matches ||
     window.matchMedia('(pointer: coarse)').matches;
   const needsTooltip = !!account?.id && !isTouchDevice;
+  const hasOpenModal = useSelector(state => state.modals.modalStack.length > 0);
   const reopenAccount = useReopenAccountMutation();
   const updateAccount = useUpdateAccountMutation();
 
@@ -150,6 +152,19 @@ export function Account<FieldName extends SheetFields<'account'>>({
         name: 'account-subgroup',
         text: t('Subgroup'),
         onClick: () => setGroupMenuOpen(true),
+      },
+      {
+        name: 'account-edit-icon',
+        text: t('Edit icon'),
+        onClick: () =>
+          dispatch(
+            pushModal({
+              modal: {
+                name: 'account-icon-picker',
+                options: { accountId: account.id },
+              },
+            }),
+          ),
       },
       account?.closed
         ? {
@@ -264,7 +279,24 @@ export function Account<FieldName extends SheetFields<'account'>>({
                     />
                   </InitialFocus>
                 ) : (
-                  name
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      minWidth: 0,
+                    }}
+                  >
+                    <AccountIcon account={account} size={16} />
+                    <Text
+                      style={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {name}
+                    </Text>
+                  </View>
                 )
               }
               right={
@@ -384,7 +416,7 @@ export function Account<FieldName extends SheetFields<'account'>>({
       triggerProps={{
         delay: 1000,
         closeDelay: 250,
-        isDisabled: isContextMenuOpen || groupMenuOpen,
+        isDisabled: isContextMenuOpen || groupMenuOpen || hasOpenModal,
       }}
     >
       {accountRow}

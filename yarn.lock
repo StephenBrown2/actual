@@ -120,6 +120,7 @@ __metadata:
     "@jlongster/sql.js": "npm:^1.6.7"
     "@rschedule/core": "npm:^1.5.0"
     "@rschedule/standard-date-adapter": "npm:^1.5.0"
+    "@silvia-odwyer/photon-node": "npm:^0.3.4"
     "@types/better-sqlite3": "npm:^7.6.13"
     "@types/deep-equal": "npm:^1.0.4"
     "@types/jlongster__sql.js": "npm:@types/sql.js@latest"
@@ -216,6 +217,7 @@ __metadata:
     pluggy-sdk: "npm:^0.89.0"
     supertest: "npm:^7.2.2"
     typescript-strict-plugin: "npm:^2.4.4"
+    undici: "npm:^8.0.0"
     uuid: "npm:^14.0.1"
     vite: "npm:^8.1.5"
     vitest: "npm:^4.1.10"
@@ -7653,6 +7655,13 @@ __metadata:
   version: 2.0.0
   resolution: "@sideway/pinpoint@npm:2.0.0"
   checksum: 10/1ed21800128b2b23280ba4c9db26c8ff6142b97a8683f17639fd7f2128aa09046461574800b30fb407afc5b663c2331795ccf3b654d4b38fa096e41a5c786bf8
+  languageName: node
+  linkType: hard
+
+"@silvia-odwyer/photon-node@npm:^0.3.4":
+  version: 0.3.4
+  resolution: "@silvia-odwyer/photon-node@npm:0.3.4"
+  checksum: 10/9353e3b2ed8e89f3410bdfe390c12e269867440ceb9a6f5c8c765732efd86bf299fbb7fae68c8959241878705b0f8516016c98cd83e69770bfc05f531dc6edb7
   languageName: node
   linkType: hard
 
@@ -27130,6 +27139,13 @@ __metadata:
   version: 7.29.0
   resolution: "undici@npm:7.29.0"
   checksum: 10/ca73639071bdcbc41e57be1800847fa18f86f8fbf7a5641ff9899f7bbb6f5cecdd593e225f5fd94e31703dcbfaea4a722a3b81cab90c5c4e2b406aec1ae55732
+  languageName: node
+  linkType: hard
+
+"undici@npm:^8.0.0":
+  version: 8.3.0
+  resolution: "undici@npm:8.3.0"
+  checksum: 10/812a8643c2506bcfa7d9d163864965e95fd1b7e5803431ad072321a6f80511d6fd800913eb4846ca3f19102287342f31f9fad142f40c89d897d6ecb81d61843c
   languageName: node
   linkType: hard
 

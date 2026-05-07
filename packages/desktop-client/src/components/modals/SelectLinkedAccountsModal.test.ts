@@ -21,8 +21,6 @@ function makeLocalAccount(
     tombstone: 0,
     account_id: null,
     bank: null,
-    bankName: null,
-    bankId: null,
     mask: null,
     official_name: null,
     balance_current: null,
@@ -31,6 +29,8 @@ function makeLocalAccount(
     account_sync_source: null,
     last_sync: null,
     bank_sync_status: null,
+    website: null,
+    icon: null,
     ...overrides,
   };
 }

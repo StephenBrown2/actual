@@ -26,6 +26,7 @@ import { css } from '@emotion/css';
 
 import { useMoveAccountMutation, useSyncAndDownloadMutation } from '#accounts';
 import { isAccountFailedSync } from '#accounts/syncStatus';
+import { AccountIcon } from '#components/accounts/AccountIcon';
 import { makeAmountFullStyle } from '#components/budget/util';
 import { MOBILE_NAV_HEIGHT } from '#components/mobile/MobileNavTabs';
 import { PullToRefresh } from '#components/mobile/PullToRefresh';
@@ -193,6 +194,7 @@ function AccountListItem({
                 opacity: isConnected ? 1 : 0,
               }}
             />
+            <AccountIcon account={account} size={20} />
             <TextOneLine
               style={{
                 ...styles.text,
