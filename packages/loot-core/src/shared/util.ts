@@ -503,6 +503,25 @@ export function currencyToAmount(currencyAmount: string): Amount | null {
   return isNaN(amount) ? null : amount;
 }
 
+/**
+ * Returns the number of digits after the decimal separator in a currency string,
+ * using the same separator logic as currencyToAmount. Returns 0 if there is no
+ * fractional part.
+ */
+export function getFractionDigitCount(currencyAmount: string): number {
+  currencyAmount = currencyAmount.replace(/\u2212/g, '-');
+  const match = currencyAmount.match(/[,.](?=[^.,]*$)/);
+  if (
+    !match ||
+    (match[0] === getNumberFormat().thousandsSeparator &&
+      match.index + 4 <= currencyAmount.length)
+  ) {
+    return 0;
+  }
+  const fraction = currencyAmount.slice(match.index + 1);
+  return fraction.replace(/\D/g, '').length;
+}
+
 export function currencyToInteger(
   currencyAmount: CurrencyAmount,
 ): IntegerAmount | null {

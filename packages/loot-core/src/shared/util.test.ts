@@ -1,5 +1,6 @@
 import {
   currencyToAmount,
+  getFractionDigitCount,
   getNumberFormat,
   looselyParseAmount,
   setNumberFormat,
@@ -222,6 +223,23 @@ describe('utility functions', () => {
     expect(currencyToAmount('3.')).toBe(3);
     expect(currencyToAmount('3.000')).toBe(3000);
     expect(currencyToAmount('3.000,')).toBe(3000);
+  });
+
+  test('getFractionDigitCount counts trailing decimal digits', () => {
+    setNumberFormat({ format: 'comma-dot', hideFraction: false });
+
+    // No decimal separator: zero fraction digits.
+    expect(getFractionDigitCount('1000')).toBe(0);
+    // Last separator is a thousands separator (4+ chars after) so no fraction.
+    expect(getFractionDigitCount('1,000')).toBe(0);
+    // Standard two-decimal currency input.
+    expect(getFractionDigitCount('1.23')).toBe(2);
+    // Three-decimal currency input (e.g. KWD).
+    expect(getFractionDigitCount('1.234')).toBe(3);
+    // Honors the configured decimal separator (dot-comma format).
+    setNumberFormat({ format: 'dot-comma', hideFraction: false });
+    expect(getFractionDigitCount('1.234,56')).toBe(2);
+    setNumberFormat({ format: 'comma-dot', hideFraction: false });
   });
 
   test('titleFirst works with all inputs', () => {
