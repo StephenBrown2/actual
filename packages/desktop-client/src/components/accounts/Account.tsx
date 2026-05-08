@@ -55,6 +55,7 @@ import { SchedulesProvider } from '#hooks/useCachedSchedules';
 import { useCategories } from '#hooks/useCategories';
 import { useDateFormat } from '#hooks/useDateFormat';
 import { useFailedAccounts } from '#hooks/useFailedAccounts';
+import { useFormat } from '#hooks/useFormat';
 import { useLocalPref } from '#hooks/useLocalPref';
 import { usePayees } from '#hooks/usePayees';
 import { getSchedulesQuery } from '#hooks/useSchedules';
@@ -245,6 +246,7 @@ type AccountInternalProps = {
   payees: PayeeEntity[];
   categoryGroups: CategoryGroupEntity[];
   hideFraction: boolean;
+  decimalPlaces: number;
   accountsSyncing: string[];
   dispatch: AppDispatch;
   onSetTransfer: ReturnType<typeof useTransactionBatchActions>['onSetTransfer'];
@@ -397,6 +399,22 @@ class AccountInternal extends PureComponent<
     // If the active account changes - close the transaction entry mode
     if (this.state.isAdding && this.props.accountId !== prevProps.accountId) {
       this.setState({ isAdding: false });
+    }
+
+    // When decimalPlaces changes with an active search, re-run search so results use new precision
+    if (
+      prevProps.decimalPlaces !== this.props.decimalPlaces &&
+      this.state.search !== ''
+    ) {
+      this.updateQuery(
+        queries.transactionsSearch(
+          this.currentQuery,
+          this.state.search,
+          this.props.dateFormat,
+          this.props.decimalPlaces,
+        ),
+        true,
+      );
     }
 
     // If the user was on a different screen and is now coming back to
@@ -565,6 +583,7 @@ class AccountInternal extends PureComponent<
           this.currentQuery,
           this.state.search,
           this.props.dateFormat,
+          this.props.decimalPlaces,
         ),
         true,
       );
@@ -1987,6 +2006,7 @@ export function Account() {
   const { data: payees = [] } = usePayees();
   const failedAccounts = useFailedAccounts();
   const dateFormat = useDateFormat() || 'MM/dd/yyyy';
+  const decimalPlaces = useFormat().currency.decimalPlaces;
   const [hideFraction] = useSyncedPref('hideFraction');
   const [expandSplits] = useLocalPref('expand-splits');
   const [showBalances, setShowBalances] = useSyncedPref(
@@ -2046,6 +2066,7 @@ export function Account() {
             failedAccounts={failedAccounts}
             dateFormat={dateFormat}
             hideFraction={String(hideFraction) === 'true'}
+            decimalPlaces={decimalPlaces}
             expandSplits={expandSplits}
             showBalances={String(showBalances) === 'true'}
             setShowBalances={showBalances =>

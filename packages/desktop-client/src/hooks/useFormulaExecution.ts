@@ -15,6 +15,7 @@ import { HyperFormula } from 'hyperformula';
 import { getLiveRange } from '#components/reports/getLiveRange';
 import { calculateTimeRange } from '#components/reports/reportRanges';
 
+import { useFormat } from './useFormat';
 import { useLocale } from './useLocale';
 
 type QueryConfig = {
@@ -88,6 +89,7 @@ export function useFormulaExecution(
   namedExpressions?: Record<string, number | string>,
 ) {
   const locale = useLocale();
+  const decimalPlaces = useFormat().currency.decimalPlaces;
   const [result, setResult] = useState<number | string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -196,7 +198,7 @@ export function useFormulaExecution(
           }
 
           const data = await fetchQuerySum(queryConfig);
-          queryData[queryName] = integerToAmount(data, 2);
+          queryData[queryName] = integerToAmount(data, decimalPlaces);
         }
 
         for (const queryName of queryCountNames) {
@@ -274,6 +276,7 @@ export function useFormulaExecution(
                 param1 as string[],
                 param2 as string,
                 param3 as string,
+                decimalPlaces,
               );
 
               processedFormula = processedFormula.replace(
@@ -396,7 +399,14 @@ export function useFormulaExecution(
     return () => {
       cancelled = true;
     };
-  }, [formula, queriesVersion, locale, queries, namedExpressions]);
+  }, [
+    formula,
+    queriesVersion,
+    locale,
+    queries,
+    namedExpressions,
+    decimalPlaces,
+  ]);
 
   return { result, isLoading, error };
 }
@@ -717,6 +727,7 @@ async function fetchBudgetDimensionValueDirect(
   categoryIds: string[],
   startMonth: string,
   endMonth: string,
+  decimalPlaces: number,
 ): Promise<number> {
   const allowed = new Set([
     'budgeted',
@@ -745,15 +756,18 @@ async function fetchBudgetDimensionValueDirect(
   };
 
   if (dim === 'budgeted') {
-    return integerToAmount(await sumDimension('budget-{catId}'), 2);
+    return integerToAmount(await sumDimension('budget-{catId}'), decimalPlaces);
   }
 
   if (dim === 'spent') {
-    return integerToAmount(await sumDimension('sum-amount-{catId}'), 2);
+    return integerToAmount(
+      await sumDimension('sum-amount-{catId}'),
+      decimalPlaces,
+    );
   }
 
   if (dim === 'goal') {
-    return integerToAmount(await sumDimension('goal-{catId}'), 2);
+    return integerToAmount(await sumDimension('goal-{catId}'), decimalPlaces);
   }
 
   // Handle balance dimensions: chain month-by-month with carryover logic
@@ -812,11 +826,11 @@ async function fetchBudgetDimensionValueDirect(
     }
 
     if (dim === 'balance_start') {
-      return integerToAmount(balances[intervals[0]]?.start || 0, 2);
+      return integerToAmount(balances[intervals[0]]?.start || 0, decimalPlaces);
     }
     return integerToAmount(
       balances[intervals[intervals.length - 1]]?.end || 0,
-      2,
+      decimalPlaces,
     );
   }
 
