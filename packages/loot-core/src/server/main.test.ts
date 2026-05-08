@@ -1,4 +1,8 @@
 // @ts-strict-ignore
+import nodeFs from 'fs/promises';
+import os from 'os';
+import path from 'path';
+
 import { deserializeClock, getClock } from '@actual-app/crdt';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -36,64 +40,82 @@ afterEach(async () => {
 
 async function createTestBudget(name) {
   const templatePath = fs.join(__dirname, '/../mocks/files', name);
-  const budgetPath = fs.join(__dirname, '/../mocks/files/budgets/test-budget');
-  fs._setDocumentDir(fs.join(budgetPath, '..'));
+  const budgetId = `test-budget-${uuidv4()}`;
+  const tmpRoot = await nodeFs.mkdtemp(path.join(os.tmpdir(), 'actual-test-'));
+  const budgetsDir = fs.join(tmpRoot, 'budgets');
+  const budgetPath = fs.join(budgetsDir, budgetId);
+  fs._setDocumentDir(budgetsDir);
 
-  await fs.mkdir(budgetPath);
-  await fs.copyFile(
+  await nodeFs.mkdir(budgetPath, { recursive: true });
+  await nodeFs.copyFile(
     fs.join(templatePath, 'metadata.json'),
     fs.join(budgetPath, 'metadata.json'),
   );
-  await fs.copyFile(
+  await nodeFs.copyFile(
     fs.join(templatePath, 'db.sqlite'),
     fs.join(budgetPath, 'db.sqlite'),
   );
+
+  return { budgetId, budgetPath, tmpRoot };
 }
 
 describe('Budgets', () => {
+  let testBudgetPath: string | null = null;
+  let testTmpRoot: string | null = null;
+
   afterEach(async () => {
     fs._setDocumentDir(null);
-    const budgetPath = fs.join(
-      __dirname,
-      '/../mocks/files/budgets/test-budget',
-    );
 
-    if (await fs.exists(budgetPath)) {
-      await fs.removeDirRecursively(budgetPath);
+    if (testBudgetPath && (await fs.exists(testBudgetPath))) {
+      await fs.removeDirRecursively(testBudgetPath);
     }
+    if (testTmpRoot) {
+      await nodeFs.rm(testTmpRoot, { recursive: true, force: true });
+    }
+
+    testBudgetPath = null;
+    testTmpRoot = null;
   });
 
   test('budget is successfully loaded', async () => {
-    await createTestBudget('default-budget-template');
+    const { budgetId, budgetPath, tmpRoot } = await createTestBudget(
+      'default-budget-template',
+    );
+    testBudgetPath = budgetPath;
+    testTmpRoot = tmpRoot;
 
     // Grab the clock to compare later
-    await db.openDatabase('test-budget');
+    await db.openDatabase(budgetId);
     const row = await db.first<db.DbClockMessage>(
       'SELECT * FROM messages_clock',
     );
 
     const { error } = await runHandler(handlers['load-budget'], {
-      id: 'test-budget',
+      id: budgetId,
     });
     expect(error).toBe(undefined);
 
     // Make sure the prefs were loaded
-    expect(prefs.getPrefs().id).toBe('test-budget');
+    expect(prefs.getPrefs().id).toBe(budgetId);
 
     // Make sure the clock has been loaded
     expect(getClock()).toEqual(deserializeClock(row.clock));
   });
 
   test('budget detects out of sync migrations', async () => {
-    await createTestBudget('default-budget-template');
+    const { budgetId, budgetPath, tmpRoot } = await createTestBudget(
+      'default-budget-template',
+    );
+    testBudgetPath = budgetPath;
+    testTmpRoot = tmpRoot;
 
-    await db.openDatabase('test-budget');
+    await db.openDatabase(budgetId);
     db.runQuery('INSERT INTO __migrations__ (id) VALUES (1000)');
 
     const spy = vi.spyOn(console, 'warn').mockImplementation(() => null);
 
     const { error } = await runHandler(handlers['load-budget'], {
-      id: 'test-budget',
+      id: budgetId,
     });
     // There should be an error and the budget should be unloaded
     expect(error).toBe('out-of-sync-migrations');
