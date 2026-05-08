@@ -4,10 +4,7 @@ import type { CSSProperties } from '@actual-app/components/styles';
 import { theme } from '@actual-app/components/theme';
 import { send } from '@actual-app/core/platform/client/connection';
 import * as monthUtils from '@actual-app/core/shared/months';
-import {
-  currencyToAmount,
-  integerToCurrency,
-} from '@actual-app/core/shared/util';
+import { integerToAmount } from '@actual-app/core/shared/util';
 import type { Handlers } from '@actual-app/core/types/handlers';
 import type {
   CategoryEntity,
@@ -70,15 +67,14 @@ export function makeAmountGrey(value: number | string | null): CSSProperties {
 
 export function makeBalanceAmountStyle(
   value: number,
+  decimalPlaces: number,
   goalValue?: number | null,
   budgetedValue?: number | null,
 ) {
-  // Converts an integer currency value to a normalized decimal amount.
-  // First converts the integer to currency format, then to a decimal amount.
-  // Uses integerToCurrency to display the value correctly according to user prefs.
-
+  // Converts an integer currency value to a decimal amount using actual
+  // decimal precision (no display rounding) for exact numeric comparisons.
   const normalizeIntegerValue = (val: number | null | undefined) =>
-    typeof val === 'number' ? currencyToAmount(integerToCurrency(val)) : 0;
+    typeof val === 'number' ? integerToAmount(val, decimalPlaces) : 0;
 
   const currencyValue = normalizeIntegerValue(value);
 

@@ -29,6 +29,7 @@ import { useEnvelopeSheetValue } from '#components/budget/envelope/EnvelopeBudge
 import { makeAmountFullStyle } from '#components/budget/util';
 import { FinancialText } from '#components/FinancialText';
 import { useCategories } from '#hooks/useCategories';
+import { useFormat } from '#hooks/useFormat';
 import { useSheetValue } from '#hooks/useSheetValue';
 import { useSyncedPref } from '#hooks/useSyncedPref';
 import { envelopeBudget, trackingBudget } from '#spreadsheet/bindings';
@@ -73,6 +74,9 @@ function CategoryList({
   showBalances,
 }: CategoryListProps) {
   const { t } = useTranslation();
+  const {
+    currency: { decimalPlaces },
+  } = useFormat();
   const { splitTransaction, groupedCategories } = useMemo(() => {
     return items.reduce(
       (acc, item, index) => {
@@ -173,6 +177,7 @@ function CategoryList({
                         }),
                     },
                     showBalances,
+                    decimalPlaces,
                   })}
                 </Fragment>
               ))}
@@ -399,6 +404,7 @@ type CategoryItemProps = {
   highlighted?: boolean;
   embedded?: boolean;
   showBalances?: boolean;
+  decimalPlaces: number;
 };
 
 function CategoryItem({
@@ -408,6 +414,7 @@ function CategoryItem({
   highlighted,
   embedded,
   showBalances,
+  decimalPlaces,
   ...props
 }: CategoryItemProps) {
   const { t } = useTranslation();
@@ -480,7 +487,7 @@ function CategoryItem({
                 <>
                   {' '}
                   <FinancialText>
-                    {integerToCurrency(toBudget || 0)}
+                    {integerToCurrency(toBudget || 0, decimalPlaces)}
                   </FinancialText>
                 </>
               )
@@ -488,7 +495,7 @@ function CategoryItem({
                 <>
                   {' '}
                   <FinancialText>
-                    {integerToCurrency(balance || 0)}
+                    {integerToCurrency(balance || 0, decimalPlaces)}
                   </FinancialText>
                 </>
               )}
