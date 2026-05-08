@@ -460,28 +460,54 @@ export function toRelaxedNumber(
 
 export function integerToCurrency(
   integerAmount: IntegerAmount,
-  formatter = getNumberFormat().formatter,
   decimalPlaces: number = 2,
+  formatter?: { format: (value: number) => string },
 ) {
   const divisor = Math.pow(10, decimalPlaces);
   const amount = safeNumber(integerAmount) / divisor;
-
-  return formatter.format(amount);
+  const displayDecimalPlaces = numberFormatConfig.hideFraction
+    ? 0
+    : decimalPlaces;
+  const effectiveFormatter =
+    formatter ??
+    getNumberFormat({
+      format: numberFormatConfig.format,
+      hideFraction: numberFormatConfig.hideFraction,
+      decimalPlaces: displayDecimalPlaces,
+    }).formatter;
+  return effectiveFormatter.format(amount);
 }
 
-export function integerToCurrencyWithDecimal(integerAmount: IntegerAmount) {
+export function integerToCurrencyWithDecimal(
+  integerAmount: IntegerAmount,
+  decimalPlaces: number = 2,
+) {
+  const divisor = Math.pow(10, decimalPlaces);
   // If decimal digits exist, keep them. Otherwise format them as usual.
-  if (integerAmount % 100 !== 0) {
+  if (integerAmount % divisor !== 0) {
     return integerToCurrency(
       integerAmount,
+      decimalPlaces,
       getNumberFormat({
-        ...numberFormatConfig,
+        format: numberFormatConfig.format,
         hideFraction: false,
+        decimalPlaces,
       }).formatter,
     );
   }
 
-  return integerToCurrency(integerAmount);
+  const displayDecimalPlaces = numberFormatConfig.hideFraction
+    ? 0
+    : decimalPlaces;
+  return integerToCurrency(
+    integerAmount,
+    decimalPlaces,
+    getNumberFormat({
+      format: numberFormatConfig.format,
+      hideFraction: numberFormatConfig.hideFraction,
+      decimalPlaces: displayDecimalPlaces,
+    }).formatter,
+  );
 }
 
 export function amountToCurrency(amount: Amount): CurrencyAmount {
