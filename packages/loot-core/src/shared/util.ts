@@ -534,9 +534,10 @@ export function getFractionDigitCount(currencyAmount: string): number {
 
 export function currencyToInteger(
   currencyAmount: CurrencyAmount,
+  decimalPlaces: number = 2,
 ): IntegerAmount | null {
   const amount = currencyToAmount(currencyAmount);
-  return amount == null ? null : amountToInteger(amount);
+  return amount == null ? null : amountToInteger(amount, decimalPlaces);
 }
 
 export function stringToInteger(str: string): number | null {
