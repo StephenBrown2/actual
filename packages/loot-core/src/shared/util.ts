@@ -572,6 +572,31 @@ export function currencyToInteger(
   return amount == null ? null : amountToInteger(amount, decimalPlaces);
 }
 
+/**
+ * Parse a currency string, round to the given decimal places, and format it.
+ * Use when reformatting user input in cells that must always keep decimals
+ * visible regardless of the user's `hideFraction` preference (e.g. the
+ * Transactions table debit/credit InputCell formatters).
+ */
+export function formatCurrencyInput(
+  value: string | null | undefined,
+  decimalPlaces: number,
+): string {
+  if (value == null || value === '') return '';
+  const amount = currencyToAmount(value);
+  return amount == null
+    ? ''
+    : integerToCurrency(
+        amountToInteger(amount, decimalPlaces),
+        decimalPlaces,
+        getNumberFormat({
+          format: numberFormatConfig.format,
+          hideFraction: false,
+          decimalPlaces,
+        }).formatter,
+      );
+}
+
 export function stringToInteger(str: string): number | null {
   const amount = parseInt(
     str.replace(/\u2212/g, '-').replace(/[^-0-9.,]/g, ''),
