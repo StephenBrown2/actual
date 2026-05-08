@@ -448,8 +448,14 @@ export function safeNumber(value: number) {
   return value;
 }
 
-export function toRelaxedNumber(currencyAmount: CurrencyAmount): Amount {
-  return integerToAmount(currencyToInteger(currencyAmount) || 0);
+export function toRelaxedNumber(
+  currencyAmount: CurrencyAmount,
+  decimalPlaces: number = 2,
+): Amount {
+  return integerToAmount(
+    currencyToInteger(currencyAmount, decimalPlaces) || 0,
+    decimalPlaces,
+  );
 }
 
 export function integerToCurrency(
