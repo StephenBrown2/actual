@@ -332,6 +332,9 @@ export function useFormulaExecution(
           language: 'enUS',
           localeLang: typeof locale === 'string' ? locale : 'en-US',
           dateFormats: ['DD/MM/YYYY', 'YYYY-MM-DD', 'YYYY/MM/DD'],
+          context: {
+            defaultDecimalPlaces: decimalPlaces,
+          },
         });
 
         // Add a sheet and set the formula in cell A1

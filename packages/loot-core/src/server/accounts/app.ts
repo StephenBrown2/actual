@@ -466,16 +466,8 @@ async function createAccount({
   balance?: number | undefined;
   offBudget?: boolean | undefined;
   closed?: boolean | undefined;
-  decimalPlaces?: number | undefined;
+  decimalPlaces: number;
 }) {
-  const safeDecimalPlaces: number =
-    decimalPlaces != null &&
-    Number.isFinite(decimalPlaces) &&
-    Number.isInteger(decimalPlaces) &&
-    decimalPlaces >= 0
-      ? decimalPlaces
-      : 2;
-
   const id: AccountEntity['id'] = await db.insertAccount({
     name,
     offbudget: offBudget ? 1 : 0,
@@ -492,7 +484,7 @@ async function createAccount({
 
     await db.insertTransaction({
       account: id,
-      amount: amountToInteger(balance, safeDecimalPlaces),
+      amount: amountToInteger(balance, decimalPlaces),
       category: offBudget ? null : payee.category,
       payee: payee.id,
       date: monthUtils.currentDay(),

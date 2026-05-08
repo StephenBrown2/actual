@@ -160,7 +160,7 @@ const AmountInput = memo(function AmountInput({
 
   const onChangeText = (text: string) => {
     text = reapplyThousandSeparators(text);
-    text = appendDecimals(text, String(hideFraction) === 'true', decimalPlaces);
+    text = appendDecimals(text, decimalPlaces, String(hideFraction) === 'true');
     if (getFractionDigitCount(text) > decimalPlaces) {
       flashFractionError();
       return;

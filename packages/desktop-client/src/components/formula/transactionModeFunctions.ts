@@ -54,7 +54,9 @@ export const transactionModeFunctions: Record<string, FunctionDef> = {
       { name: 'integer_amount', description: 'Integer amount in cents' },
       {
         name: 'decimal_places',
-        description: 'Number of decimal places (default: 2)',
+        description: t(
+          'Number of decimal places (optional; budget currency minor units, or 2)',
+        ),
       },
     ],
   },

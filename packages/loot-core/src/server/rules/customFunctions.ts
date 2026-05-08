@@ -4,14 +4,23 @@ import type { ProcedureAst } from 'hyperformula/typings/parser';
 
 import { integerToAmount } from '#shared/util';
 
+export type HyperFormulaCustomContext = {
+  balanceOfPrefetch?: Map<string, number>;
+  defaultDecimalPlaces?: number;
+};
+
 export class CustomFunctionsPlugin extends FunctionPlugin {
   integerToAmount(ast: ProcedureAst, state: InterpreterState) {
     return this.runFunction(
       ast.args,
       state,
       this.metadata('INTEGER_TO_AMOUNT'),
-      (integerAmount: number, decimalPlaces: number) => {
-        return integerToAmount(integerAmount, decimalPlaces);
+      (integerAmount: number, decimalPlaces?: number) => {
+        const ctx = this.config.context as
+          | HyperFormulaCustomContext
+          | undefined;
+        const places = decimalPlaces ?? ctx?.defaultDecimalPlaces ?? 2;
+        return integerToAmount(integerAmount, places);
       },
     );
   }
@@ -34,7 +43,7 @@ export class CustomFunctionsPlugin extends FunctionPlugin {
       this.metadata('BALANCE_OF'),
       (accountKey: string) => {
         const ctx = this.config.context as
-          | { balanceOfPrefetch?: Map<string, number> }
+          | HyperFormulaCustomContext
           | undefined;
         return ctx?.balanceOfPrefetch?.get(accountKey) ?? 0;
       },
@@ -65,7 +74,6 @@ CustomFunctionsPlugin.implementedFunctions = {
       {
         argumentType: FunctionArgumentType.NUMBER,
         optionalArg: true,
-        defaultValue: 2,
       },
     ],
   },

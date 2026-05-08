@@ -132,10 +132,13 @@ export function useFormat(): UseFormatResult {
   // Hack: keep the global number format in sync - update the settings when
   // the underlying configuration changes.
   // This should be patched by moving all number-formatting utilities away from
-  // the global `getNumberFormat()` and to using the reactive `useFormat` hook.
+  // the global number format helpers and to using the reactive `useFormat` hook.
   useEffect(() => {
-    setNumberFormat(numberFormatConfig);
-  }, [numberFormatConfig]);
+    setNumberFormat({
+      ...numberFormatConfig,
+      currencyDecimalPlaces: activeCurrency.decimalPlaces,
+    });
+  }, [numberFormatConfig, activeCurrency.decimalPlaces]);
 
   const applyCurrencyStyling = useCallback(
     (formattedNumericValue: string, currencySymbol: string): string => {
@@ -182,7 +185,9 @@ export function useFormat(): UseFormatResult {
 
       const intlFormatter = getNumberFormat({
         format: numberFormatConfig.format,
-        decimalPlaces: displayDecimalPlaces,
+        ...(isFinancialType
+          ? { decimalPlaces: displayDecimalPlaces ?? 0 }
+          : {}),
       }).formatter;
 
       const { numericValue, formattedString } = format(

@@ -55,12 +55,13 @@ export const loadPrefs = createAppAsyncThunk(
     );
 
     // Certain loot-core utils depend on state outside of the React tree, update them
-    setNumberFormat(
-      parseNumberFormat({
+    setNumberFormat({
+      ...parseNumberFormat({
         format: syncedPrefs.numberFormat,
         hideFraction: syncedPrefs.hideFraction,
       }),
-    );
+      currencyDecimalPlaces: undefined,
+    });
 
     // We need to load translations before the app renders
     setI18NextLanguage(globalPrefs.language ?? '');

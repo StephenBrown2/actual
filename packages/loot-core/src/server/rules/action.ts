@@ -306,6 +306,7 @@ export class Action {
         dateFormats: ['DD/MM/YYYY', 'YYYY-MM-DD', 'YYYY/MM/DD'],
         context: {
           balanceOfPrefetch: transaction['_balanceOfPrefetched'] ?? new Map(),
+          defaultDecimalPlaces: transaction._decimalPlaces ?? 2,
         },
       });
 

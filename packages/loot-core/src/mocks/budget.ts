@@ -618,7 +618,10 @@ export async function createTestBudget(handlers: Handlers) {
 
   await runMutator(async () => {
     for (const account of accounts) {
-      account.id = await handlers['account-create'](account);
+      account.id = await handlers['account-create']({
+        ...account,
+        decimalPlaces: 2,
+      });
     }
   });
 

@@ -4,10 +4,12 @@ import {
   CustomFunctionsPlugin,
   customFunctionsTranslations,
 } from '@actual-app/core/server/rules/customFunctions';
+import { getCurrency } from '@actual-app/core/shared/currencies';
 import { HyperFormula } from 'hyperformula';
 import enUS from 'hyperformula/i18n/languages/enUS';
 
 import { useLocale } from './useLocale';
+import { useSyncedPref } from './useSyncedPref';
 
 HyperFormula.registerLanguage('enUS', enUS);
 HyperFormula.registerFunctionPlugin(
@@ -33,6 +35,10 @@ export function useTransactionFormulaExecution(
   transaction: TransactionContext,
 ) {
   const locale = useLocale();
+  const [defaultCurrencyCodePref] = useSyncedPref('defaultCurrencyCode');
+  const defaultDecimalPlaces = getCurrency(
+    defaultCurrencyCodePref || '',
+  ).decimalPlaces;
   const [result, setResult] = useState<number | string | boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,8 +62,8 @@ export function useTransactionFormulaExecution(
           localeLang: typeof locale === 'string' ? locale : 'en-US',
           dateFormats: ['DD/MM/YYYY', 'YYYY-MM-DD', 'YYYY/MM/DD'],
           context: {
-            // No server prefetch in preview
             balanceOfPrefetch: new Map(),
+            defaultDecimalPlaces,
           },
         });
 
@@ -141,7 +147,7 @@ export function useTransactionFormulaExecution(
     return () => {
       cancelled = true;
     };
-  }, [formula, transaction, locale]);
+  }, [formula, transaction, locale, defaultDecimalPlaces]);
 
   return { result, error };
 }

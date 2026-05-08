@@ -58,7 +58,7 @@ type CreateAccountPayload = {
   name: string;
   balance: number;
   offBudget: boolean;
-  decimalPlaces?: number;
+  decimalPlaces: number;
 };
 
 export function useCreateAccountMutation() {
