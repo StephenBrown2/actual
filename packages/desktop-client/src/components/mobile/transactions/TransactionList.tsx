@@ -41,6 +41,7 @@ import type {
 import { FloatingActionBar } from '#components/mobile/FloatingActionBar';
 import { useAccounts } from '#hooks/useAccounts';
 import { useCategoriesById } from '#hooks/useCategories';
+import { useFormat } from '#hooks/useFormat';
 import { useLocale } from '#hooks/useLocale';
 import { useNavigate } from '#hooks/useNavigate';
 import { usePayees } from '#hooks/usePayees';
@@ -279,6 +280,7 @@ function SelectedTransactionsFloatingActionBar({
   showMakeTransfer,
 }: SelectedTransactionsFloatingActionBarProps) {
   const { t } = useTranslation();
+  const decimalPlaces = useFormat().currency.decimalPlaces;
   const editMenuTriggerRef = useRef(null);
   const [isEditMenuOpen, setIsEditMenuOpen] = useState(false);
   const moreOptionsMenuTriggerRef = useRef(null);
@@ -502,7 +504,7 @@ function SelectedTransactionsFloatingActionBar({
                       case 'amount':
                         displayValue = Number.isNaN(Number(value))
                           ? value
-                          : integerToCurrency(Number(value));
+                          : integerToCurrency(Number(value), decimalPlaces);
                         break;
                       case 'notes':
                         displayValue = `${mode} with ${String(value)}`;

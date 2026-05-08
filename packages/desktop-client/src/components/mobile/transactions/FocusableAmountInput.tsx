@@ -1,10 +1,11 @@
-import React, { memo, useEffect, useRef, useState } from 'react';
+import React, { memo, useEffect, useId, useRef, useState } from 'react';
 import type {
   ComponentPropsWithRef,
   CSSProperties,
   HTMLProps,
   Ref,
 } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from '@actual-app/components/button';
 import type { CSSProperties as EmotionCSSProperties } from '@actual-app/components/styles';
@@ -12,14 +13,17 @@ import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 import {
-  amountToCurrency,
+  amountToInteger,
   appendDecimals,
   currencyToAmount,
+  getFractionDigitCount,
   reapplyThousandSeparators,
 } from '@actual-app/core/shared/util';
 import { css } from '@emotion/css';
 
 import { makeAmountFullStyle } from '#components/budget/util';
+import { FinancialText } from '#components/FinancialText';
+import { useFormat } from '#hooks/useFormat';
 import { useMergedRefs } from '#hooks/useMergedRefs';
 import { useSyncedPref } from '#hooks/useSyncedPref';
 
@@ -43,11 +47,20 @@ const AmountInput = memo(function AmountInput({
   textStyle,
   ...props
 }: AmountInputProps) {
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState('');
   const [value, setValue] = useState(0);
+  const [showFractionError, setShowFractionError] = useState(false);
+  const [fractionErrorMessage, setFractionErrorMessage] = useState('');
+  const fractionErrorClearRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const fractionErrorId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [hideFraction] = useSyncedPref('hideFraction');
+  const format = useFormat();
+  const decimalPlaces = format.currency.decimalPlaces;
 
   const mergedInputRef = useMergedRefs<HTMLInputElement>(
     props.inputRef,
@@ -55,6 +68,27 @@ const AmountInput = memo(function AmountInput({
   );
 
   const initialValue = Math.abs(props.value);
+
+  function clearFractionErrorState() {
+    if (fractionErrorClearRef.current != null) {
+      clearTimeout(fractionErrorClearRef.current);
+      fractionErrorClearRef.current = null;
+    }
+    setShowFractionError(false);
+    setFractionErrorMessage('');
+  }
+
+  function flashFractionError() {
+    const message = t('This currency does not allow that many decimal places');
+    setFractionErrorMessage(message);
+    setShowFractionError(true);
+    if (fractionErrorClearRef.current != null) {
+      clearTimeout(fractionErrorClearRef.current);
+    }
+    fractionErrorClearRef.current = setTimeout(() => {
+      clearFractionErrorState();
+    }, 800);
+  }
 
   useEffect(() => {
     if (focused) {
@@ -66,7 +100,16 @@ const AmountInput = memo(function AmountInput({
     setEditing(false);
     setText('');
     setValue(initialValue);
+    clearFractionErrorState();
   }, [initialValue]);
+
+  useEffect(() => {
+    return () => {
+      if (fractionErrorClearRef.current != null) {
+        clearTimeout(fractionErrorClearRef.current);
+      }
+    };
+  }, []);
 
   const onKeyUp: HTMLProps<HTMLInputElement>['onKeyUp'] = e => {
     if (e.key === 'Backspace' && text === '') {
@@ -117,7 +160,12 @@ const AmountInput = memo(function AmountInput({
 
   const onChangeText = (text: string) => {
     text = reapplyThousandSeparators(text);
-    text = appendDecimals(text, String(hideFraction) === 'true');
+    text = appendDecimals(text, String(hideFraction) === 'true', decimalPlaces);
+    if (getFractionDigitCount(text) > decimalPlaces) {
+      flashFractionError();
+      return;
+    }
+    clearFractionErrorState();
     setEditing(true);
     setText(text);
     props.onChangeValue?.(text);
@@ -135,6 +183,10 @@ const AmountInput = memo(function AmountInput({
       onBlur={onBlur}
       onKeyUp={onKeyUp}
       data-testid="amount-input"
+      aria-invalid={showFractionError || undefined}
+      aria-describedby={
+        showFractionError && fractionErrorMessage ? fractionErrorId : undefined
+      }
       style={{ flex: 1, textAlign: 'center', position: 'absolute' }}
     />
   );
@@ -143,8 +195,10 @@ const AmountInput = memo(function AmountInput({
     <View
       style={{
         justifyContent: 'center',
-        borderWidth: 1,
-        borderColor: theme.pillBorderSelected,
+        borderWidth: showFractionError ? 2 : 1,
+        borderColor: showFractionError
+          ? theme.errorBorder
+          : theme.pillBorderSelected,
         borderRadius: 4,
         padding: 5,
         backgroundColor: theme.tableBackground,
@@ -153,15 +207,32 @@ const AmountInput = memo(function AmountInput({
       }}
     >
       <View style={{ overflowY: 'auto', overflowX: 'hidden' }}>{input}</View>
-      <Text
+      <FinancialText
         style={{
           pointerEvents: 'none',
           ...textStyle,
         }}
         data-testid="amount-input-text"
       >
-        {editing ? text || amountToCurrency(0) : amountToCurrency(value)}
-      </Text>
+        {editing
+          ? text || format.forEdit(amountToInteger(0, decimalPlaces))
+          : format.forEdit(amountToInteger(value, decimalPlaces))}
+      </FinancialText>
+      {showFractionError && fractionErrorMessage ? (
+        <Text
+          id={fractionErrorId}
+          aria-live="assertive"
+          role="alert"
+          style={{
+            fontSize: 11,
+            marginTop: 4,
+            color: theme.errorText,
+            textAlign: 'center',
+          }}
+        >
+          {fractionErrorMessage}
+        </Text>
+      ) : null}
     </View>
   );
 });
@@ -193,6 +264,8 @@ export const FocusableAmountInput = memo(function FocusableAmountInput({
   onChangeValue,
   ...props
 }: FocusableAmountInputProps) {
+  const format = useFormat();
+  const decimalPlaces = format.currency.decimalPlaces;
   const [isNegative, setIsNegative] = useState(true);
   const [liveValue, setLiveValue] = useState(Math.abs(value));
 
@@ -293,7 +366,7 @@ export const FocusableAmountInput = memo(function FocusableAmountInput({
               ...style,
             }}
           >
-            <Text
+            <FinancialText
               style={{
                 ...makeAmountFullStyle(value, {
                   positiveColor: theme.numberPositive,
@@ -305,8 +378,8 @@ export const FocusableAmountInput = memo(function FocusableAmountInput({
                 ...textStyle,
               }}
             >
-              {amountToCurrency(Math.abs(value))}
-            </Text>
+              {format.forEdit(amountToInteger(Math.abs(value), decimalPlaces))}
+            </FinancialText>
           </View>
         </Button>
       </View>
