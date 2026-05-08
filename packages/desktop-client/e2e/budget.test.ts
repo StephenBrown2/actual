@@ -1,8 +1,13 @@
 import type { Page } from '@playwright/test';
 
+import {
+  currencyPrecisionTestData,
+  setDefaultCurrency,
+} from './currency-precision';
 import { expect, test } from './fixtures';
 import type { BudgetPage } from './page-models/budget-page';
 import { ConfigurationPage } from './page-models/configuration-page';
+import { Navigation } from './page-models/navigation';
 
 test.describe('Budget', () => {
   let page: Page;
@@ -65,5 +70,25 @@ test.describe('Budget', () => {
     expect(page.url()).toContain('/accounts');
     expect(await accountPage.accountName.textContent()).toMatch('All Accounts');
     await page.getByRole('button', { name: 'Back' }).click();
+  });
+
+  test.describe('Currency Precision', () => {
+    for (const { code } of currencyPrecisionTestData) {
+      const codeLabel = code === '' ? 'Default' : code;
+      test(`budget page displays for ${codeLabel}`, async () => {
+        const navigation = new Navigation(page);
+        await setDefaultCurrency(page, navigation, code);
+
+        await page.goto('/budget', { waitUntil: 'load' });
+        await page.waitForLoadState('networkidle');
+        await expect(budgetPage.budgetSummary.first()).toBeVisible({
+          timeout: 30000,
+        });
+        await expect(budgetPage.budgetTable).toBeVisible();
+
+        await page.mouse.move(0, 0);
+        await expect(page).toMatchThemeScreenshots();
+      });
+    }
   });
 });

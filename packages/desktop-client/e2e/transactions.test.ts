@@ -1,5 +1,9 @@
 import type { Page } from '@playwright/test';
 
+import {
+  currencyPrecisionTestData,
+  setDefaultCurrency,
+} from './currency-precision';
 import { expect, test } from './fixtures';
 import type { AccountPage } from './page-models/account-page';
 import { ConfigurationPage } from './page-models/configuration-page';
@@ -24,6 +28,111 @@ test.describe('Transactions', () => {
 
   test.afterEach(async () => {
     await page?.close();
+  });
+
+  test.describe('Currency Precision', () => {
+    for (const {
+      code,
+      transactionDebit,
+      expectedDebitDisplay,
+      split,
+      edit,
+      balanceCheck,
+    } of currencyPrecisionTestData) {
+      const codeLabel = code === '' ? 'Default' : code;
+      test(`entered amount matches displayed amount for ${codeLabel}`, async () => {
+        await setDefaultCurrency(page, navigation, code);
+        accountPage = await navigation.goToAccountPage('Ally Savings');
+        await accountPage.waitFor();
+
+        await accountPage.createSingleTransaction({
+          payee: `${codeLabel} Test`,
+          debit: transactionDebit,
+          category: 'Food',
+        });
+
+        const transaction = accountPage.getNthTransaction(0);
+        await expect(transaction.debit).toHaveText(expectedDebitDisplay);
+        await expect(transaction.payee).toHaveText(`${codeLabel} Test`);
+
+        await expect(page).toMatchThemeScreenshots();
+      });
+
+      test(`split transaction shows correct amounts for ${codeLabel}`, async () => {
+        await setDefaultCurrency(page, navigation, code);
+        accountPage = await navigation.goToAccountPage('Ally Savings');
+        await accountPage.waitFor();
+
+        const [firstDebit, ...restDebits] = split.debits;
+        await accountPage.createSplitTransaction([
+          { payee: split.payee, debit: firstDebit, category: 'split' },
+          ...restDebits.map((debit, i) => ({
+            debit,
+            category: (i === 0 ? 'Food' : 'General') as string,
+          })),
+        ]);
+
+        for (let i = 0; i < split.expectedDisplays.length; i++) {
+          const expected = split.expectedDisplays[i];
+          const row = accountPage.getNthTransaction(i);
+          if (i === 0) {
+            await expect(row.payee).toHaveText(split.payee);
+          }
+          await expect(row.debit).toHaveText(expected);
+        }
+
+        await expect(page).toMatchThemeScreenshots();
+      });
+
+      test(`modified amount persists correctly for ${codeLabel}`, async () => {
+        await setDefaultCurrency(page, navigation, code);
+        accountPage = await navigation.goToAccountPage('Ally Savings');
+        await accountPage.waitFor();
+
+        await accountPage.createSingleTransaction({
+          payee: `Edit ${codeLabel}`,
+          debit: edit.initialDebit,
+          category: 'Food',
+        });
+
+        let transaction = accountPage.getNthTransaction(0);
+        await expect(transaction.debit).toHaveText(edit.expectedInitial);
+
+        await transaction.debit.click();
+        const debitInput = transaction.debit.getByRole('textbox');
+        await debitInput.selectText();
+        await debitInput.pressSequentially(edit.newDebit);
+        await page.keyboard.press('Tab');
+
+        transaction = accountPage.getNthTransaction(0);
+        await expect(transaction.debit).toHaveText(edit.expectedAfter);
+      });
+
+      test(`account balance header updates after transaction for ${codeLabel}`, async () => {
+        await setDefaultCurrency(page, navigation, code);
+        accountPage = await navigation.goToAccountPage('Ally Savings');
+        await accountPage.waitFor();
+
+        const balanceBefore = await accountPage.accountBalance.textContent();
+
+        await accountPage.createSingleTransaction({
+          payee: 'Balance Check',
+          debit: balanceCheck.debit,
+          category: 'Food',
+        });
+
+        const balanceAfter = await accountPage.accountBalance.textContent();
+        expect(balanceAfter).not.toBe(balanceBefore);
+        await expect(accountPage.accountBalance).toHaveText(
+          balanceCheck.expectedHeaderBalance,
+        );
+
+        const transaction = accountPage.getNthTransaction(0);
+        await expect(transaction.debit).toHaveText(
+          balanceCheck.expectedDebitDisplay,
+        );
+      });
+    }
   });
 
   test('checks the page visuals', async () => {

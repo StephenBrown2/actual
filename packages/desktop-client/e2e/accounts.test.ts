@@ -2,6 +2,10 @@ import { join } from 'path';
 
 import type { Page } from '@playwright/test';
 
+import {
+  currencyPrecisionTestData,
+  setDefaultCurrency,
+} from './currency-precision';
 import { expect, test } from './fixtures';
 import type { AccountPage } from './page-models/account-page';
 import { ConfigurationPage } from './page-models/configuration-page';
@@ -26,23 +30,52 @@ test.describe('Accounts', () => {
     await page?.close();
   });
 
-  test('creates a new account and views the initial balance transaction', async () => {
-    accountPage = await navigation.createAccount({
-      name: 'New Account',
-      offBudget: false,
-      balance: 100,
-    });
+  test.describe('Currency Precision', () => {
+    for (const {
+      code,
+      balance,
+      expectedDisplay,
+    } of currencyPrecisionTestData) {
+      const codeLabel = code === '' ? 'Default' : code;
+      test(`starting balance displayed correctly for ${codeLabel}`, async () => {
+        await setDefaultCurrency(page, navigation, code);
+        accountPage = await navigation.createAccount({
+          name: `${codeLabel} Local Account`,
+          offBudget: false,
+          balance,
+        });
+        await accountPage.waitFor();
+        await expect(accountPage.accountBalance).toContainText(expectedDisplay);
 
-    const transaction = accountPage.getNthTransaction(0);
-    await expect(transaction.payee).toHaveText('Starting Balance');
-    await expect(transaction.notes).toHaveText('');
-    await expect(transaction.category).toHaveText('Starting Balances');
-    await expect(transaction.debit).toHaveText('');
-    await expect(transaction.credit).toHaveText('100.00');
-    await expect(page).toMatchThemeScreenshots();
+        const transaction = accountPage.getNthTransaction(0);
+        await expect(transaction.payee).toHaveText('Starting Balance');
+        await expect(transaction.notes).toHaveText('');
+        await expect(transaction.category).toHaveText('Starting Balances');
+        await expect(transaction.debit).toHaveText('');
+        await expect(transaction.credit).toHaveText(expectedDisplay);
+        await expect(page).toMatchThemeScreenshots();
+      });
+
+      test(`close account shows correct balance for ${codeLabel}`, async () => {
+        await setDefaultCurrency(page, navigation, code);
+        accountPage = await navigation.createAccount({
+          name: `${codeLabel} Close Test`,
+          offBudget: false,
+          balance,
+        });
+        await accountPage.waitFor();
+        await expect(accountPage.accountBalance).toContainText(expectedDisplay);
+
+        const modal = await accountPage.clickCloseAccount();
+        await expect(modal.locator).toContainText('balance');
+        await expect(modal.locator).toContainText(expectedDisplay);
+        await expect(modal.locator).toMatchThemeScreenshots();
+        await page.reload();
+      });
+    }
   });
 
-  test('closes an account', async () => {
+  test('closes an account with transfer', async () => {
     accountPage = await navigation.goToAccountPage('Roth IRA');
 
     await expect(accountPage.accountName).toHaveText('Roth IRA');
