@@ -244,6 +244,7 @@ export function reapplyThousandSeparators(amountText: string) {
 export function appendDecimals(
   amountText: string,
   hideDecimals = false,
+  decimalPlaces: number = 2,
 ): string {
   const { decimalSeparator: separator } = getNumberFormat();
   let result = amountText;
@@ -253,10 +254,19 @@ export function appendDecimals(
   if (!hideDecimals) {
     result = result.replaceAll(/[,.]/g, '');
     result = result.replace(/^0+(?!$)/, '');
-    result = result.padStart(3, '0');
-    result = result.slice(0, -2) + separator + result.slice(-2);
+    result = result.padStart(decimalPlaces + 1, '0');
+    if (decimalPlaces > 0) {
+      result =
+        result.slice(0, -decimalPlaces) +
+        separator +
+        result.slice(-decimalPlaces);
+    }
   }
-  return amountToCurrency(currencyToAmount(result));
+  const amount = currencyToAmount(result) || 0;
+  const formatter = getNumberFormat({
+    decimalPlaces: hideDecimals ? 0 : decimalPlaces,
+  }).formatter;
+  return formatter.format(amount);
 }
 
 const NUMBER_FORMATS = [

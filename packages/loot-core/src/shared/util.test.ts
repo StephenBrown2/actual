@@ -1,4 +1,5 @@
 import {
+  appendDecimals,
   currencyToAmount,
   getFractionDigitCount,
   getNumberFormat,
@@ -223,6 +224,21 @@ describe('utility functions', () => {
     expect(currencyToAmount('3.')).toBe(3);
     expect(currencyToAmount('3.000')).toBe(3000);
     expect(currencyToAmount('3.000,')).toBe(3000);
+  });
+
+  test('appendDecimals respects decimalPlaces including three-decimal currencies', () => {
+    setNumberFormat({ format: 'comma-dot', hideFraction: false });
+
+    expect(appendDecimals('1000000', false, 0)).toBe('1,000,000');
+    expect(appendDecimals('1000000', false, 2)).toBe('10,000.00');
+    expect(appendDecimals('1000000', false, 3)).toBe('1,000.000');
+  });
+
+  test('appendDecimals defaults to two-decimal-place behavior', () => {
+    setNumberFormat({ format: 'comma-dot', hideFraction: false });
+
+    expect(appendDecimals('1000000')).toBe('10,000.00');
+    expect(appendDecimals('1000000', true)).toBe('1,000,000');
   });
 
   test('getFractionDigitCount counts trailing decimal digits', () => {
