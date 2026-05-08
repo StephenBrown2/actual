@@ -12,7 +12,7 @@ import { Input } from '@actual-app/components/input';
 import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
-import { toRelaxedNumber } from '@actual-app/core/shared/util';
+import { currencyToAmount } from '@actual-app/core/shared/util';
 
 import { useCreateAccountMutation } from '#accounts';
 import { Link } from '#components/common/Link';
@@ -26,6 +26,7 @@ import {
 import { Checkbox } from '#components/forms';
 import { validateAccountName } from '#components/util/accountValidation';
 import { useAccounts } from '#hooks/useAccounts';
+import { useFormat } from '#hooks/useFormat';
 import { useNavigate } from '#hooks/useNavigate';
 import { closeModal } from '#modals/modalsSlice';
 import { useDispatch } from '#redux';
@@ -34,6 +35,7 @@ export function CreateLocalAccountModal() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const format = useFormat();
   const { data: accounts = [] } = useAccounts();
   const [name, setName] = useState('');
   const [offbudget, setOffbudget] = useState(false);
@@ -65,11 +67,13 @@ export function CreateLocalAccountModal() {
     setBalanceError(balanceError);
 
     if (!nameError && !balanceError) {
+      const amount = currencyToAmount(balance);
       createAccount.mutate(
         {
           name,
-          balance: toRelaxedNumber(balance),
+          balance: amount != null ? amount : 0,
           offBudget: offbudget,
+          decimalPlaces: format.currency.decimalPlaces,
         },
         {
           onSuccess: id => {

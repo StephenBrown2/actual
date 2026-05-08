@@ -27,6 +27,7 @@ import {
 import { FocusableAmountInput } from '#components/mobile/transactions/FocusableAmountInput';
 import { Notes } from '#components/Notes';
 import { useCategory } from '#hooks/useCategory';
+import { useFormat } from '#hooks/useFormat';
 import { useNotes } from '#hooks/useNotes';
 import type { Modal as ModalType } from '#modals/modalsSlice';
 import { envelopeBudget } from '#spreadsheet/bindings';
@@ -53,6 +54,7 @@ export function EnvelopeBudgetMenuModal({
     flexBasis: '100%',
   };
 
+  const decimalPlaces = useFormat().currency.decimalPlaces;
   const defaultMenuItemStyle: CSSProperties = {
     ...styles.mobileMenuItem,
     color: theme.menuItemText,
@@ -69,7 +71,7 @@ export function EnvelopeBudgetMenuModal({
   const notesId = category ? `${category.id}-${month}` : '';
   const originalNotes = useNotes(notesId) ?? '';
   const _onUpdateBudget = (amount: number) => {
-    onUpdateBudget?.(amountToInteger(amount));
+    onUpdateBudget?.(amountToInteger(amount, decimalPlaces));
   };
 
   const [showMore, setShowMore] = useState(false);
@@ -119,7 +121,7 @@ export function EnvelopeBudgetMenuModal({
               <Trans>Budgeted</Trans>
             </Text>
             <FocusableAmountInput
-              value={integerToAmount(budgeted || 0)}
+              value={integerToAmount(budgeted || 0, decimalPlaces)}
               focused={amountFocused}
               onFocus={() => setAmountFocused(true)}
               onBlur={() => setAmountFocused(false)}
