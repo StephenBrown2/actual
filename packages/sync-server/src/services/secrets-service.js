@@ -17,6 +17,10 @@ export const SecretName = {
   pluggyai_itemIds: 'pluggyai_itemIds',
   enablebanking_applicationId: 'enablebanking_applicationId',
   enablebanking_secretKey: 'enablebanking_secretKey',
+  plaid_clientId: 'plaid_clientId',
+  plaid_secret: 'plaid_secret',
+  plaid_env: 'plaid_env',
+  plaid_accessTokens: 'plaid_accessTokens',
 };
 
 class SecretsDb {

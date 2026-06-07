@@ -9,6 +9,7 @@ type ServerConfig = {
   SIMPLEFIN_SERVER: string;
   PLUGGYAI_SERVER: string;
   ENABLEBANKING_SERVER: string;
+  PLAID_SERVER: string;
 };
 
 let config: ServerConfig | null = null;
@@ -47,6 +48,7 @@ export function getServer(url?: string): ServerConfig | null {
         SIMPLEFIN_SERVER: joinURL(url, '/simplefin'),
         PLUGGYAI_SERVER: joinURL(url, '/pluggyai'),
         ENABLEBANKING_SERVER: joinURL(url, '/enablebanking'),
+        PLAID_SERVER: joinURL(url, '/plaid'),
       };
     } catch (error) {
       logger.warn(

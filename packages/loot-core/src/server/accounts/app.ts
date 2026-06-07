@@ -32,6 +32,7 @@ import type {
   ImportTransactionEntity,
   SyncServerEnableBankingAccount,
   SyncServerGoCardlessAccount,
+  SyncServerPlaidAccount,
   SyncServerPluggyAiAccount,
   SyncServerSimpleFinAccount,
   TransactionEntity,
@@ -58,6 +59,7 @@ export type AccountHandlers = {
   'simplefin-accounts-link': typeof linkSimpleFinAccount;
   'pluggyai-accounts-link': typeof linkPluggyAiAccount;
   'enablebanking-accounts-link': typeof linkEnableBankingAccount;
+  'plaid-accounts-link': typeof linkPlaidAccount;
   'account-create': typeof createAccount;
   'account-close': typeof closeAccount;
   'account-reopen': typeof reopenAccount;
@@ -79,6 +81,12 @@ export type AccountHandlers = {
   'enablebanking-configure': typeof enableBankingConfigure;
   'simplefin-accounts': typeof simpleFinAccounts;
   'pluggyai-accounts': typeof pluggyAiAccounts;
+  'plaid-status': typeof plaidStatus;
+  'plaid-accounts': typeof plaidAccounts;
+  'plaid-create-link-token': typeof plaidCreateLinkToken;
+  'plaid-exchange-token': typeof plaidExchangeToken;
+  'plaid-poll-link-token': typeof pollPlaidLinkToken;
+  'plaid-poll-link-token-stop': typeof stopPlaidLinkTokenPolling;
   'gocardless-get-banks': typeof getGoCardlessBanks;
   'gocardless-create-web-token': typeof createGoCardlessWebToken;
   'accounts-bank-sync': typeof accountsBankSync;
@@ -478,6 +486,79 @@ async function linkEnableBankingAccount({
   return 'ok';
 }
 
+async function linkPlaidAccount({
+  externalAccount,
+  upgradingId,
+  offBudget = false,
+  startingDate,
+  startingBalance,
+}: LinkAccountBaseParams & {
+  externalAccount: SyncServerPlaidAccount;
+}) {
+  let id;
+  const institution = {
+    name: externalAccount.institution ?? t('Unknown'),
+  };
+
+  const bank = await link.findOrCreateBank(
+    institution,
+    externalAccount.institution ?? externalAccount.account_id,
+  );
+
+  if (upgradingId) {
+    const accRow = await db.first<db.DbAccount>(
+      'SELECT * FROM accounts WHERE id = ?',
+      [upgradingId],
+    );
+
+    if (!accRow) {
+      throw new Error(`Account with ID ${upgradingId} not found.`);
+    }
+
+    id = accRow.id;
+    await db.update('accounts', {
+      id,
+      account_id: externalAccount.account_id,
+      bank: bank.id,
+      account_sync_source: 'plaid',
+    });
+  } else {
+    id = uuidv4();
+    await db.insertWithUUID('accounts', {
+      id,
+      account_id: externalAccount.account_id,
+      name: externalAccount.name,
+      official_name: externalAccount.official_name ?? externalAccount.name,
+      bank: bank.id,
+      offbudget: offBudget ? 1 : 0,
+      account_sync_source: 'plaid',
+    });
+    await db.insertPayee({
+      name: '',
+      transfer_acct: id,
+    });
+  }
+
+  const syncRes = await bankSync.syncAccount(
+    undefined,
+    undefined,
+    id,
+    externalAccount.account_id,
+    bank.bank_id,
+    startingDate,
+    startingBalance,
+  );
+
+  await handleSyncResponse(syncRes, id);
+
+  connection.send('sync-event', {
+    type: 'success',
+    tables: ['transactions'],
+  });
+
+  return 'ok';
+}
+
 async function createAccount({
   name,
   subgroup,
@@ -753,6 +834,7 @@ async function checkSecret(name: string) {
 }
 
 let stopPolling = false;
+let stopPlaidPolling = false;
 
 async function pollGoCardlessWebToken({
   requisitionId,
@@ -831,6 +913,66 @@ async function pollGoCardlessWebToken({
 
 async function stopGoCardlessWebTokenPolling() {
   stopPolling = true;
+  return 'ok';
+}
+
+async function pollPlaidLinkToken({ linkToken }: { linkToken: string }) {
+  const userToken = await asyncStorage.getItem('user-token');
+  if (!userToken) return { error: 'unknown' };
+
+  const startTime = Date.now();
+  stopPlaidPolling = false;
+
+  async function getData(
+    cb: (
+      data:
+        | { status: 'timeout' }
+        | { status: 'unknown'; message?: string }
+        | { status: 'success'; publicToken: string },
+    ) => void,
+  ) {
+    if (stopPlaidPolling) return;
+
+    if (Date.now() - startTime >= 1000 * 60 * 10) {
+      cb({ status: 'timeout' });
+      return;
+    }
+
+    const serverConfig = getServer();
+    if (!serverConfig) throw new Error('Failed to get server config.');
+
+    const data = await post(
+      serverConfig.PLAID_SERVER + '/poll-link-token',
+      { linkToken },
+      { 'X-ACTUAL-TOKEN': userToken },
+    );
+
+    if (data && data.publicToken) {
+      cb({ status: 'success', publicToken: data.publicToken });
+    } else if (data && data.error_code) {
+      cb({ status: 'unknown', message: data.error_code });
+    } else {
+      setTimeout(() => getData(cb), 3000);
+    }
+  }
+
+  return new Promise<
+    { data: { publicToken: string } } | { error: string; message?: string }
+  >(resolve => {
+    void getData(result => {
+      if (result.status === 'success') {
+        resolve({ data: { publicToken: result.publicToken } });
+      } else if (result.status === 'timeout') {
+        resolve({ error: 'timeout' });
+      } else {
+        resolve({ error: result.status, message: result.message });
+      }
+    });
+  });
+}
+
+async function stopPlaidLinkTokenPolling() {
+  stopPlaidPolling = true;
   return 'ok';
 }
 
@@ -1626,12 +1768,102 @@ app.method('gocardless-accounts-link', linkGoCardlessAccount);
 app.method('simplefin-accounts-link', linkSimpleFinAccount);
 app.method('pluggyai-accounts-link', linkPluggyAiAccount);
 app.method('enablebanking-accounts-link', linkEnableBankingAccount);
+app.method('plaid-accounts-link', linkPlaidAccount);
 app.method('account-create', mutator(undoable(createAccount)));
 app.method('account-close', mutator(closeAccount));
 app.method('account-reopen', mutator(undoable(reopenAccount)));
 app.method('account-move', mutator(undoable(moveAccount)));
 app.method('account-subgroup-move', mutator(undoable(moveAccountSubgroup)));
 app.method('secret-set', setSecret);
+async function plaidStatus() {
+  const userToken = await asyncStorage.getItem('user-token');
+
+  if (!userToken) {
+    return { error: 'unauthorized' };
+  }
+
+  const serverConfig = getServer();
+  if (!serverConfig) {
+    throw new Error('Failed to get server config.');
+  }
+
+  return post(
+    serverConfig.PLAID_SERVER + '/status',
+    {},
+    {
+      'X-ACTUAL-TOKEN': userToken,
+    },
+  );
+}
+
+async function plaidAccounts() {
+  const userToken = await asyncStorage.getItem('user-token');
+
+  if (!userToken) {
+    return { error: 'unauthorized' };
+  }
+
+  const serverConfig = getServer();
+  if (!serverConfig) {
+    throw new Error('Failed to get server config.');
+  }
+
+  try {
+    return await post(
+      serverConfig.PLAID_SERVER + '/accounts',
+      {},
+      {
+        'X-ACTUAL-TOKEN': userToken,
+      },
+      60000,
+    );
+  } catch {
+    return { error_code: 'TIMED_OUT' };
+  }
+}
+
+async function plaidCreateLinkToken({ userId }: { userId?: string }) {
+  const userToken = await asyncStorage.getItem('user-token');
+
+  if (!userToken) {
+    return { error: 'unauthorized' };
+  }
+
+  const serverConfig = getServer();
+  if (!serverConfig) {
+    throw new Error('Failed to get server config.');
+  }
+
+  return post(
+    serverConfig.PLAID_SERVER + '/create-link-token',
+    { userId },
+    {
+      'X-ACTUAL-TOKEN': userToken,
+    },
+  );
+}
+
+async function plaidExchangeToken({ publicToken }: { publicToken: string }) {
+  const userToken = await asyncStorage.getItem('user-token');
+
+  if (!userToken) {
+    return { error: 'unauthorized' };
+  }
+
+  const serverConfig = getServer();
+  if (!serverConfig) {
+    throw new Error('Failed to get server config.');
+  }
+
+  return post(
+    serverConfig.PLAID_SERVER + '/exchange-token',
+    { publicToken },
+    {
+      'X-ACTUAL-TOKEN': userToken,
+    },
+  );
+}
+
 app.method('secret-check', checkSecret);
 app.method('gocardless-poll-web-token', pollGoCardlessWebToken);
 app.method('gocardless-poll-web-token-stop', stopGoCardlessWebTokenPolling);
@@ -1647,6 +1879,12 @@ app.method('enablebanking-poll-auth-stop', stopEnableBankingPollAuth);
 app.method('enablebanking-configure', enableBankingConfigure);
 app.method('simplefin-accounts', simpleFinAccounts);
 app.method('pluggyai-accounts', pluggyAiAccounts);
+app.method('plaid-status', plaidStatus);
+app.method('plaid-accounts', plaidAccounts);
+app.method('plaid-create-link-token', plaidCreateLinkToken);
+app.method('plaid-exchange-token', plaidExchangeToken);
+app.method('plaid-poll-link-token', pollPlaidLinkToken);
+app.method('plaid-poll-link-token-stop', stopPlaidLinkTokenPolling);
 app.method('gocardless-get-banks', getGoCardlessBanks);
 app.method('gocardless-create-web-token', createGoCardlessWebToken);
 app.method('accounts-bank-sync', accountsBankSync);

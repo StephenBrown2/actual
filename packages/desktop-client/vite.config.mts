@@ -24,6 +24,63 @@ const reactCompilerInclude = new RegExp(
     .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/.*\\.[jt]sx$`,
 );
 
+const plaidLinkPopup = (): Plugin => ({
+  name: 'plaid-link-popup',
+  configureServer(server) {
+    // Serve the Plaid Link popup without COEP so cdn.plaid.com and
+    // plaid.com iframes are not blocked by the main app's require-corp policy.
+    const csp = [
+      "default-src 'none'",
+      "script-src https://cdn.plaid.com 'unsafe-inline'",
+      'frame-src https://*.plaid.com',
+      'connect-src https://*.plaid.com',
+      "style-src 'unsafe-inline'",
+    ].join('; ');
+
+    const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Plaid Link</title></head>
+<body>
+<script>
+(function () {
+  var params = new URLSearchParams(window.location.search);
+  var token = params.get('token');
+  function finish(result) {
+    if (window.opener) {
+      window.opener.postMessage(
+        Object.assign({ type: 'plaid-link-result' }, result),
+        window.location.origin
+      );
+    }
+    window.close();
+  }
+  var script = document.createElement('script');
+  script.src = 'https://cdn.plaid.com/link/v2/stable/link-initialize.js';
+  script.onload = function () {
+    var handler = window.Plaid.create({
+      token: token,
+      onSuccess: function (publicToken) { handler.destroy(); finish({ publicToken: publicToken }); },
+      onExit: function (err) { handler.destroy(); finish({ error: err ? String(err.error_message || err) : null }); },
+    });
+    handler.open();
+  };
+  script.onerror = function () { finish({ error: 'Failed to load Plaid Link script' }); };
+  document.head.appendChild(script);
+})();
+</script>
+</body>
+</html>`;
+
+    server.middlewares.use('/plaid-link', (_req, res) => {
+      res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+      res.removeHeader('Cross-Origin-Embedder-Policy');
+      res.setHeader('Content-Security-Policy', csp);
+      res.setHeader('Content-Type', 'text/html');
+      res.end(html);
+    });
+  },
+});
+
 const addWatchers = (): Plugin => ({
   name: 'add-watchers',
   configureServer(server) {
@@ -392,6 +449,10 @@ export default defineConfig(async ({ mode, command }) => {
               ignoreURLParametersMatching: [/^v$/],
               navigateFallback: '/index.html',
               maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 10MB
+              // Activate new SW immediately without waiting for all tabs to
+              // close, so deny-list changes take effect on the next page load.
+              skipWaiting: true,
+              clientsClaim: true,
               navigateFallbackDenylist: [
                 /^\/account\/.*$/,
                 /^\/admin\/.*$/,
@@ -401,11 +462,14 @@ export default defineConfig(async ({ mode, command }) => {
                 /^\/kcab\/.*$/,
                 /^\/plugin-data\/.*$/,
                 /^\/enablebanking\/.*$/,
+                /^\/plaid-link$/,
+                /^\/plaid\/.*$/,
               ],
             },
           }),
       injectShims(),
       addWatchers(),
+      plaidLinkPopup(),
       mode === 'desktop' ? undefined : lootCoreBackend(),
       mode === 'desktop' ? undefined : pluginsServiceAssets(),
       react(),

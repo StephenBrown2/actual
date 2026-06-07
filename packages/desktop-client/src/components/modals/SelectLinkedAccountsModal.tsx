@@ -15,6 +15,7 @@ import type {
   AccountEntity,
   SyncServerEnableBankingAccount,
   SyncServerGoCardlessAccount,
+  SyncServerPlaidAccount,
   SyncServerPluggyAiAccount,
   SyncServerSimpleFinAccount,
 } from '@actual-app/core/types/models';
@@ -23,6 +24,7 @@ import { format as formatDate, parseISO } from 'date-fns';
 import {
   useLinkAccountEnableBankingMutation,
   useLinkAccountMutation,
+  useLinkAccountPlaidMutation,
   useLinkAccountPluggyAiMutation,
   useLinkAccountSimpleFinMutation,
   useUnlinkAccountMutation,
@@ -95,6 +97,12 @@ export type SelectLinkedAccountsModalProps =
       externalAccounts: SyncServerEnableBankingAccount[];
       syncSource: 'enableBanking';
       upgradingAccountId?: string;
+    }
+  | {
+      requisitionId?: undefined;
+      externalAccounts: SyncServerPlaidAccount[];
+      syncSource: 'plaid';
+      upgradingAccountId?: string;
     };
 
 export function SelectLinkedAccountsModal({
@@ -135,6 +143,12 @@ export function SelectLinkedAccountsModal({
           return {
             syncSource: 'enableBanking',
             externalAccounts: toSort as SyncServerEnableBankingAccount[],
+            upgradingAccountId,
+          };
+        case 'plaid':
+          return {
+            syncSource: 'plaid',
+            externalAccounts: toSort as SyncServerPlaidAccount[],
             upgradingAccountId,
           };
         default:
@@ -195,6 +209,7 @@ export function SelectLinkedAccountsModal({
   const linkAccountSimpleFin = useLinkAccountSimpleFinMutation();
   const linkAccountPluggyAi = useLinkAccountPluggyAiMutation();
   const linkAccountEnableBanking = useLinkAccountEnableBankingMutation();
+  const linkAccountPlaid = useLinkAccountPlaidMutation();
 
   async function onNext() {
     const chosenLocalAccountIds = Object.values(chosenAccounts);
@@ -277,6 +292,21 @@ export function SelectLinkedAccountsModal({
             startingDate,
             startingBalance,
           });
+        } else if (propsWithSortedExternalAccounts.syncSource === 'plaid') {
+          linkAccountPlaid.mutate({
+            externalAccount:
+              propsWithSortedExternalAccounts.externalAccounts[
+                externalAccountIndex
+              ],
+            upgradingId:
+              chosenLocalAccountId !== addOnBudgetAccountOption.id &&
+              chosenLocalAccountId !== addOffBudgetAccountOption.id
+                ? chosenLocalAccountId
+                : undefined,
+            offBudget,
+            startingDate,
+            startingBalance,
+          });
         } else {
           linkAccount.mutate({
             requisitionId: propsWithSortedExternalAccounts.requisitionId,
@@ -305,10 +335,7 @@ export function SelectLinkedAccountsModal({
   );
 
   function onSetLinkedAccount(
-    externalAccount:
-      | SyncServerGoCardlessAccount
-      | SyncServerSimpleFinAccount
-      | SyncServerPluggyAiAccount,
+    externalAccount: ExternalAccount,
     localAccountId: string | null | undefined,
   ) {
     setChosenAccounts(accounts => {
@@ -533,7 +560,8 @@ type ExternalAccount =
   | SyncServerGoCardlessAccount
   | SyncServerSimpleFinAccount
   | SyncServerPluggyAiAccount
-  | SyncServerEnableBankingAccount;
+  | SyncServerEnableBankingAccount
+  | SyncServerPlaidAccount;
 
 type StartingBalanceInfo = {
   date: string;
@@ -767,13 +795,7 @@ function TableRow({
   );
 }
 
-function getInstitutionName(
-  externalAccount:
-    | SyncServerGoCardlessAccount
-    | SyncServerSimpleFinAccount
-    | SyncServerPluggyAiAccount
-    | SyncServerEnableBankingAccount,
-) {
+function getInstitutionName(externalAccount: ExternalAccount) {
   if (typeof externalAccount?.institution === 'string') {
     return externalAccount?.institution ?? '';
   } else if (typeof externalAccount.institution?.name === 'string') {

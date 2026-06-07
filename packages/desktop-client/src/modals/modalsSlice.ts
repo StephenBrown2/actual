@@ -130,6 +130,12 @@ export type Modal =
       };
     }
   | {
+      name: 'plaid-init';
+      options: {
+        onSuccess: () => void;
+      };
+    }
+  | {
       name: 'enablebanking-init';
       options: {
         onSuccess: () => void;

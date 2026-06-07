@@ -7,6 +7,7 @@ import type {
   CategoryEntity,
   SyncServerEnableBankingAccount,
   SyncServerGoCardlessAccount,
+  SyncServerPlaidAccount,
   SyncServerPluggyAiAccount,
   SyncServerSimpleFinAccount,
   TransactionEntity,
@@ -572,6 +573,46 @@ export function useLinkAccountEnableBankingMutation() {
         t(
           'There was an error linking the account to Enable Banking. Please try again.',
         ),
+        error,
+      );
+    },
+  });
+}
+
+type LinkAccountPlaidPayload = LinkAccountBasePayload & {
+  externalAccount: SyncServerPlaidAccount;
+};
+
+export function useLinkAccountPlaidMutation() {
+  const queryClient = useQueryClient();
+  const dispatch = useDispatch();
+  const { t } = useTranslation();
+
+  return useMutation({
+    mutationFn: async ({
+      externalAccount,
+      upgradingId,
+      offBudget,
+      startingDate,
+      startingBalance,
+    }: LinkAccountPlaidPayload) => {
+      await send('plaid-accounts-link', {
+        externalAccount,
+        upgradingId,
+        offBudget,
+        startingDate,
+        startingBalance,
+      });
+    },
+    onSuccess: () => {
+      invalidateQueries(queryClient);
+      invalidateQueries(queryClient, payeeQueries.lists());
+    },
+    onError: error => {
+      console.error('Error linking account to Plaid:', error);
+      dispatchErrorNotification(
+        dispatch,
+        t('There was an error linking the account to Plaid. Please try again.'),
         error,
       );
     },

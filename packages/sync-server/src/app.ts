@@ -13,6 +13,7 @@ import * as corsApp from './app-cors-proxy';
 import * as enableBankingApp from './app-enablebanking/app-enablebanking';
 import * as goCardlessApp from './app-gocardless/app-gocardless';
 import * as openidApp from './app-openid';
+import * as plaidApp from './app-plaid/app-plaid';
 import * as pluggai from './app-pluggyai/app-pluggyai';
 import * as secretApp from './app-secrets';
 import * as simpleFinApp from './app-simplefin/app-simplefin';
@@ -61,6 +62,7 @@ app.use('/gocardless', goCardlessApp.handlers);
 app.use('/simplefin', simpleFinApp.handlers);
 app.use('/pluggyai', pluggai.handlers);
 app.use('/enablebanking', enableBankingApp.handlers);
+app.use('/plaid', plaidApp.handlers);
 app.use('/secret', secretApp.handlers);
 
 if (config.get('corsProxy.enabled')) {
@@ -145,11 +147,74 @@ const csp = [
   `connect-src ${connectSrc}`,
 ].join('; ');
 
+// Main app: full isolation for SharedArrayBuffer support.
 app.use((req, res, next) => {
   res.set('Cross-Origin-Opener-Policy', 'same-origin');
   res.set('Cross-Origin-Embedder-Policy', 'require-corp');
   res.set('Content-Security-Policy', csp);
   next();
+});
+
+// Plaid Link popup — served without COEP so cdn.plaid.com and plaid.com
+// iframes are not blocked. COOP same-origin is kept so window.opener works
+// (both this popup and the main window are same-origin).
+const plaidLinkCsp = [
+  "default-src 'none'",
+  "script-src https://cdn.plaid.com 'unsafe-inline'",
+  'frame-src https://*.plaid.com',
+  'connect-src https://*.plaid.com',
+  "style-src 'unsafe-inline'",
+].join('; ');
+
+const plaidLinkHtml = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Plaid Link</title></head>
+<body>
+<script>
+(function () {
+  var params = new URLSearchParams(window.location.search);
+  var token = params.get('token');
+
+  function finish(result) {
+    if (window.opener) {
+      window.opener.postMessage(
+        Object.assign({ type: 'plaid-link-result' }, result),
+        window.location.origin
+      );
+    }
+    window.close();
+  }
+
+  var script = document.createElement('script');
+  script.src = 'https://cdn.plaid.com/link/v2/stable/link-initialize.js';
+  script.onload = function () {
+    var handler = window.Plaid.create({
+      token: token,
+      onSuccess: function (publicToken) {
+        handler.destroy();
+        finish({ publicToken: publicToken });
+      },
+      onExit: function (err) {
+        handler.destroy();
+        finish({ error: err ? String(err.error_message || err) : null });
+      },
+    });
+    handler.open();
+  };
+  script.onerror = function () {
+    finish({ error: 'Failed to load Plaid Link script' });
+  };
+  document.head.appendChild(script);
+})();
+</script>
+</body>
+</html>`;
+
+app.get('/plaid-link', (_req, res) => {
+  res.set('Cross-Origin-Opener-Policy', 'same-origin');
+  res.removeHeader('Cross-Origin-Embedder-Policy');
+  res.set('Content-Security-Policy', plaidLinkCsp);
+  res.type('html').send(plaidLinkHtml);
 });
 if (isDev) {
   console.log(
