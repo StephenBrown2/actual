@@ -36,6 +36,7 @@ import {
 import type { RuleConditionEntity, ScheduleEntity } from '#types/models';
 
 import { findSchedules } from './find-schedules';
+import { schedulesToIcal } from './ical';
 
 // Utilities
 
@@ -610,6 +611,21 @@ async function advanceSchedulesService(syncSuccess) {
   }
 }
 
+async function exportSchedulesIcal() {
+  const { data: schedules } = await aqlQuery(
+    q('schedules').filter({ completed: false }).select('*'),
+  );
+  const { data: payeesArr } = await aqlQuery(q('payees').select('*'));
+  const { data: accountsArr } = await aqlQuery(q('accounts').select('*'));
+  const payees = Object.fromEntries(
+    payeesArr.map((p: { id: string }) => [p.id, p]),
+  );
+  const accounts = Object.fromEntries(
+    accountsArr.map((a: { id: string }) => [a.id, a]),
+  );
+  return schedulesToIcal(schedules, payees, accounts);
+}
+
 export type SchedulesHandlers = {
   'schedule/create': typeof createSchedule;
   'schedule/update': typeof updateSchedule;
@@ -619,6 +635,7 @@ export type SchedulesHandlers = {
   'schedule/force-run-service': typeof advanceSchedulesService;
   'schedule/discover': typeof discoverSchedules;
   'schedule/get-upcoming-dates': typeof getUpcomingDates;
+  'schedule/export-ical': typeof exportSchedulesIcal;
 };
 
 // Expose functions to the client
@@ -638,6 +655,7 @@ app.method(
 );
 app.method('schedule/discover', discoverSchedules);
 app.method('schedule/get-upcoming-dates', getUpcomingDates);
+app.method('schedule/export-ical', exportSchedulesIcal);
 
 app.service(trackJSONPaths);
 

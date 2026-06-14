@@ -46,6 +46,17 @@ export function Schedules() {
     dispatch(pushModal({ modal: { name: 'schedules-upcoming-length' } }));
   }, [dispatch]);
 
+  const onExportIcal = useCallback(async () => {
+    const icalStr = await send('schedule/export-ical');
+    const blob = new Blob([icalStr], { type: 'text/calendar' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'actual-schedules.ics';
+    a.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
   const onAction = useCallback(
     async (name: ScheduleItemAction, id: ScheduleEntity['id']) => {
       switch (name) {
@@ -142,6 +153,9 @@ export function Schedules() {
             </Button>
             <Button onPress={onChangeUpcomingLength}>
               <Trans>Change upcoming length</Trans>
+            </Button>
+            <Button onPress={onExportIcal}>
+              <Trans>Export to Calendar</Trans>
             </Button>
           </View>
           <Button variant="primary" onPress={onAdd}>
