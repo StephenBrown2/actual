@@ -17,7 +17,6 @@ import {
 } from '@actual-app/core/server/importers/wallos';
 import type { ParsedWallosSubscription } from '@actual-app/core/server/importers/wallos';
 import { format as monthUtilFormat } from '@actual-app/core/shared/months';
-import { getRecurringDescription } from '@actual-app/core/shared/schedules';
 
 import { AccountAutocomplete } from '#components/autocomplete/AccountAutocomplete';
 import { PayeeAutocomplete } from '#components/autocomplete/PayeeAutocomplete';
@@ -43,6 +42,7 @@ import {
   useSelectedItems,
 } from '#hooks/useSelected';
 import { useCreatePayeeMutation } from '#payees';
+import { getRecurringDescription } from '#util/schedule';
 
 import { ROW_HEIGHT } from './SchedulesTable';
 

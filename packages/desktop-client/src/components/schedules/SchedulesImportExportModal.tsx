@@ -7,6 +7,7 @@ import { styles } from '@actual-app/components/styles';
 import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
+import { send } from '@actual-app/core/platform/client/connection';
 
 import { Modal, ModalCloseButton, ModalHeader } from '#components/common/Modal';
 import { pushModal } from '#modals/modalsSlice';
@@ -16,6 +17,17 @@ export function SchedulesImportExportModal() {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const [error] = useState(false);
+
+  async function onExportIcal() {
+    const icalStr = await send('schedule/export-ical');
+    const blob = new Blob([icalStr], { type: 'text/calendar' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'actual-schedules.ics';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   function getErrorMessage(err: boolean) {
     switch (err) {
@@ -54,8 +66,8 @@ export function SchedulesImportExportModal() {
 
             <Text style={{ marginBottom: 15 }}>
               <Trans>
-                Export schedules to JSON, import a schedules file from another
-                budget, or import subscriptions from Wallos.
+                Export schedules to JSON or iCal, import a schedules file from
+                another budget, or import subscriptions from Wallos.
               </Trans>
             </Text>
 
@@ -73,6 +85,18 @@ export function SchedulesImportExportModal() {
               <View style={{ color: theme.pageTextLight }}>
                 <Trans>
                   Save a JSON file with schedules and linked rule data
+                </Trans>
+              </View>
+            </Button>
+
+            <Button style={itemStyle} onPress={onExportIcal}>
+              <span style={{ fontWeight: 700 }}>
+                <Trans>Export to Calendar (.ics)</Trans>
+              </span>
+              <View style={{ color: theme.pageTextLight }}>
+                <Trans>
+                  Download a calendar file to import into Google Calendar, Apple
+                  Calendar, or any other iCal-compatible app
                 </Trans>
               </View>
             </Button>
