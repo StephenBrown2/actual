@@ -465,7 +465,7 @@ export function ImportSchedulesJsonModal() {
           filepath: path,
         });
         if (response.error) {
-          setError(response.error.message);
+          setError(response.error.message ?? null);
           setParsedPayload(null);
           setFilepath(null);
           return;
@@ -552,7 +552,7 @@ export function ImportSchedulesJsonModal() {
         });
 
         if (response.error) {
-          setError(response.error.message);
+          setError(response.error.message ?? null);
           return;
         }
 
