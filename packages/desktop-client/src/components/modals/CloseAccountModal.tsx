@@ -12,7 +12,6 @@ import { styles } from '@actual-app/components/styles';
 import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
-import { integerToCurrency } from '@actual-app/core/shared/util';
 import type { AccountEntity } from '@actual-app/core/types/models';
 import type { TransObjectLiteral } from '@actual-app/core/types/util';
 
@@ -23,6 +22,7 @@ import { Link } from '#components/common/Link';
 import { Modal, ModalCloseButton, ModalHeader } from '#components/common/Modal';
 import { useAccounts } from '#hooks/useAccounts';
 import { useCategories } from '#hooks/useCategories';
+import { useFormat } from '#hooks/useFormat';
 import { pushModal } from '#modals/modalsSlice';
 import type { Modal as ModalType } from '#modals/modalsSlice';
 import { useDispatch } from '#redux';
@@ -51,6 +51,7 @@ export function CloseAccountModal({
   canDelete,
 }: CloseAccountModalProps) {
   const { t } = useTranslation(); // Initialize translation hook
+  const format = useFormat();
   const { data: allAccounts = [] } = useAccounts();
   const accounts = allAccounts.filter(a => a.closed === 0);
   const {
@@ -171,7 +172,7 @@ export function CloseAccountModal({
                       <strong>
                         {
                           {
-                            balance: integerToCurrency(balance),
+                            balance: format(balance, 'financial'),
                           } as TransObjectLiteral
                         }
                       </strong>

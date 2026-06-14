@@ -8,10 +8,7 @@ import { Input } from '@actual-app/components/input';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 import { currentDay, dayFromDate } from '@actual-app/core/shared/months';
-import {
-  amountToInteger,
-  currencyToInteger,
-} from '@actual-app/core/shared/util';
+import { amountToCurrencyInteger } from '@actual-app/core/shared/util';
 import { format as formatDate, parse as parseDate, parseISO } from 'date-fns';
 
 import { Modal, ModalCloseButton, ModalHeader } from '#components/common/Modal';
@@ -19,6 +16,7 @@ import { SectionLabel } from '#components/forms';
 import { LabeledCheckbox } from '#components/forms/LabeledCheckbox';
 import { DateSelect } from '#components/select/DateSelect';
 import { useDateFormat } from '#hooks/useDateFormat';
+import { useFormat } from '#hooks/useFormat';
 import type { Modal as ModalType } from '#modals/modalsSlice';
 
 const itemStyle: CSSProperties = {
@@ -51,6 +49,7 @@ export function EditFieldModal({
 }: EditFieldModalProps) {
   const { t } = useTranslation();
   const dateFormat = useDateFormat() || 'MM/dd/yyyy';
+  const format = useFormat();
   const noteInputRef = useRef<HTMLInputElement | null>(null);
   const noteReplaceInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -65,14 +64,14 @@ export function EditFieldModal({
       // Process the value if needed
       if (name === 'amount') {
         if (typeof value === 'string') {
-          const parsed = currencyToInteger(value);
+          const parsed = format.fromEdit(value);
           if (parsed === null) {
             alert(t('Invalid amount value'));
             return;
           }
           value = parsed;
         } else if (typeof value === 'number') {
-          value = amountToInteger(value);
+          value = amountToCurrencyInteger(value, format.currency.code);
         }
       }
 

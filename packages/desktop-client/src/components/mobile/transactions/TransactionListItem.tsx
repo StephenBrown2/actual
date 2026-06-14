@@ -22,7 +22,6 @@ import { TextOneLine } from '@actual-app/components/text-one-line';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 import { isPreviewId } from '@actual-app/core/shared/transactions';
-import { integerToCurrency } from '@actual-app/core/shared/util';
 import type { IntegerAmount } from '@actual-app/core/shared/util';
 import type {
   AccountEntity,
@@ -39,6 +38,7 @@ import { useAccount } from '#hooks/useAccount';
 import { useCachedSchedules } from '#hooks/useCachedSchedules';
 import { useCategories } from '#hooks/useCategories';
 import { useDisplayPayee } from '#hooks/useDisplayPayee';
+import { useFormat } from '#hooks/useFormat';
 import { usePayee } from '#hooks/usePayee';
 import { NotesTagFormatter } from '#notes/NotesTagFormatter';
 import { useSelector } from '#redux';
@@ -86,6 +86,7 @@ export function TransactionListItem({
   ...itemProps
 }: TransactionListItemProps) {
   const { t } = useTranslation();
+  const format = useFormat();
   const { data: { list: categories } = { list: [] } } = useCategories();
 
   const { data: payee } = usePayee(transaction?.payee);
@@ -290,7 +291,7 @@ export function TransactionListItem({
                 ...textStyle,
               }}
             >
-              {integerToCurrency(amount)}
+              {format(amount, 'financial')}
             </Text>
             {showRunningBalance && runningBalance !== undefined && (
               <Text
@@ -305,7 +306,7 @@ export function TransactionListItem({
                   }),
                 }}
               >
-                {integerToCurrency(runningBalance)}
+                {format(runningBalance, 'financial')}
               </Text>
             )}
           </View>

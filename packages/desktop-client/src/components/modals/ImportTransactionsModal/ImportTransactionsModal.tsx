@@ -24,7 +24,7 @@ import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 import { send } from '@actual-app/core/platform/client/connection';
 import type { ParseFileOptions } from '@actual-app/core/server/transactions/import/parse-file';
-import { amountToInteger } from '@actual-app/core/shared/util';
+import { amountToCurrencyInteger } from '@actual-app/core/shared/util';
 import { useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -362,14 +362,17 @@ export function ImportTransactionsModal({
         previewTransactions.push({
           ...finalTransaction,
           date,
-          amount: amountToInteger(amount),
+          amount: amountToCurrencyInteger(
+            amount,
+            prefs.defaultCurrencyCode || '',
+          ),
           cleared: clearOnImport,
         });
       }
 
       return previewTransactions;
     },
-    [categories, clearOnImport],
+    [categories, clearOnImport, prefs.defaultCurrencyCode],
   );
 
   const parse = useCallback(
@@ -702,7 +705,10 @@ export function ImportTransactionsModal({
       finalTransactions.push({
         ...finalTransaction,
         date,
-        amount: amountToInteger(amount),
+        amount: amountToCurrencyInteger(
+          amount,
+          prefs.defaultCurrencyCode || '',
+        ),
         cleared: clearOnImport,
         notes: importNotes ? finalTransaction.notes : null,
       });

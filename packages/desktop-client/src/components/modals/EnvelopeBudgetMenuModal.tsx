@@ -127,6 +127,7 @@ export function EnvelopeBudgetMenuModal({
             </Text>
             <FocusableAmountInput
               value={integerToCurrencyAmount(budgeted || 0, currency)}
+              currency={currency}
               focused={amountFocused}
               onFocus={() => setAmountFocused(true)}
               onBlur={() => setAmountFocused(false)}

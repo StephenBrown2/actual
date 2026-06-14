@@ -50,13 +50,12 @@ import {
   updateTransaction,
 } from '@actual-app/core/shared/transactions';
 import {
-  amountToInteger,
+  amountToCurrencyInteger,
   applyFindReplace,
   diffItems,
   getChangedValues,
   groupById,
-  integerToAmount,
-  integerToCurrency,
+  integerToCurrencyAmount,
   titleFirst,
 } from '@actual-app/core/shared/util';
 import type {
@@ -89,6 +88,7 @@ import { useCategories } from '#hooks/useCategories';
 import { useCurrentWordRange } from '#hooks/useCurrentWordRange';
 import { useCursorPosition } from '#hooks/useCursorPosition';
 import { useDateFormat } from '#hooks/useDateFormat';
+import { useFormat } from '#hooks/useFormat';
 import { useInitialMount } from '#hooks/useInitialMount';
 import { useInputRefValue } from '#hooks/useInputRefValue';
 import { useLocalPref } from '#hooks/useLocalPref';
@@ -121,12 +121,13 @@ function getFieldName(transactionId: TransactionEntity['id'], field: string) {
 function serializeTransaction(
   transaction: TransactionEntity,
   dateFormat: string,
+  currency: string = '',
 ) {
   const { date, amount } = transaction;
   return {
     ...transaction,
     date: formatDate(parseISO(date), dateFormat),
-    amount: integerToAmount(amount || 0),
+    amount: integerToCurrencyAmount(amount || 0, currency),
   };
 }
 
@@ -134,6 +135,7 @@ function deserializeTransaction(
   transaction: TransactionEntity,
   originalTransaction: TransactionEntity | null,
   dateFormat: string,
+  currency: string = '',
 ) {
   const { amount, date: originalDate, ...realTransaction } = transaction;
 
@@ -167,7 +169,11 @@ function deserializeTransaction(
       monthUtils.currentDay();
   }
 
-  return { ...realTransaction, date, amount: amountToInteger(amount || 0) };
+  return {
+    ...realTransaction,
+    date,
+    amount: amountToCurrencyInteger(amount || 0, currency),
+  };
 }
 
 export function lookupName(items: CategoryEntity[], id?: CategoryEntity['id']) {
@@ -254,6 +260,7 @@ function Footer({
   editingField,
   onEditField,
 }: FooterProps) {
+  const format = useFormat();
   const [transaction, ...childTransactions] = transactions;
   const emptySplitTransaction = childTransactions.find(t => t.amount === 0);
   const onClickRemainingSplit = () => {
@@ -299,10 +306,11 @@ function Footer({
               <Trans>
                 Add new split -{' '}
                 {{
-                  amount: integerToCurrency(
+                  amount: format(
                     transaction.amount > 0
                       ? transaction.error.difference
                       : -transaction.error.difference,
+                    'financial',
                   ),
                 }}{' '}
                 left
@@ -311,10 +319,11 @@ function Footer({
               <Trans>
                 Amount left:{' '}
                 {{
-                  amount: integerToCurrency(
+                  amount: format(
                     transaction.amount > 0
                       ? transaction.error.difference
                       : -transaction.error.difference,
+                    'financial',
                   ),
                 }}
               </Trans>
@@ -424,6 +433,7 @@ const ChildTransactionEdit = forwardRef<
     const { editingField, onRequestActiveEdit, onClearActiveEdit } =
       useSingleActiveEditForm()!;
     const [hideFraction, _] = useSyncedPref('hideFraction');
+    const [currency = ''] = useSyncedPref('defaultCurrencyCode');
     const noteRef = useRef<HTMLInputElement | null>(null);
 
     const prettyPayee = getPrettyPayee({
@@ -475,7 +485,7 @@ const ChildTransactionEdit = forwardRef<
                 editingField !== getFieldName(transaction.id, 'amount')
               }
               focused={amountFocused}
-              value={amountToInteger(transaction.amount)}
+              value={amountToCurrencyInteger(transaction.amount, currency)}
               zeroSign={amountSign}
               style={{ marginRight: 8 }}
               inputStyle={{
@@ -487,7 +497,7 @@ const ChildTransactionEdit = forwardRef<
                 onRequestActiveEdit(getFieldName(transaction.id, 'amount'))
               }
               onUpdate={value => {
-                const amount = integerToAmount(value);
+                const amount = integerToCurrencyAmount(value, currency);
                 if (transaction.amount !== amount) {
                   onUpdate(transaction, 'amount', amount);
                 } else {
@@ -628,12 +638,13 @@ const TransactionEditInner = memo<TransactionEditInnerProps>(
     const [upcomingLength = '7'] = useSyncedPref(
       'upcomingScheduledTransactionLength',
     );
+    const [currency = ''] = useSyncedPref('defaultCurrencyCode');
     const transactions = useMemo(
       () =>
         unserializedTransactions.map(t =>
-          serializeTransaction(t, dateFormat),
+          serializeTransaction(t, dateFormat, currency),
         ) || [],
-      [unserializedTransactions, dateFormat],
+      [unserializedTransactions, dateFormat, currency],
     );
     const { data: { grouped: categoryGroups } = { grouped: [] } } =
       useCategories();
@@ -1171,6 +1182,7 @@ const TransactionEditInner = memo<TransactionEditInnerProps>(
             <FieldLabel title={t('Amount')} flush style={{ marginBottom: 0 }} />
             <FocusableAmountInput
               value={transaction.amount}
+              currency={currency}
               zeroSign="-"
               focused={totalAmountFocused}
               onFocus={onTotalAmountEdit}
@@ -1661,6 +1673,7 @@ function TransactionEditUnconnected({
   const dispatch = useDispatch();
   const updatePayeeLocationMutation = useSavePayeeLocationMutation();
   const navigate = useNavigate();
+  const [currency = ''] = useSyncedPref('defaultCurrencyCode');
   const [transactions, setTransactions] = useState<TransactionEntity[]>([]);
   const [fetchedTransactions, setFetchedTransactions] = useState<
     TransactionEntity[]
@@ -1754,8 +1767,9 @@ function TransactionEditUnconnected({
             lastTransaction?.account ||
             null,
           category: searchParamCategory || locationState?.categoryId || null,
-          amount: -amountToInteger(
+          amount: -amountToCurrencyInteger(
             parseFloat(searchParams.get('amount') || '') || 0,
+            currency,
           ),
           cleared: searchParams.get('cleared') === 'true',
           notes: searchParams.get('notes') || '',
@@ -1770,6 +1784,7 @@ function TransactionEditUnconnected({
     searchParamCategory,
     searchParamPayee,
     searchParams,
+    currency,
   ]);
 
   const onUpdate = useCallback(
@@ -1781,6 +1796,7 @@ function TransactionEditUnconnected({
         serializedTransaction,
         null,
         dateFormat,
+        currency,
       );
 
       // Run the rules to auto-fill in any data. Right now we only do
@@ -1858,7 +1874,7 @@ function TransactionEditUnconnected({
         }
       }
     },
-    [dateFormat, transactions, isLocationGranted],
+    [dateFormat, transactions, isLocationGranted, currency],
   );
 
   const onSave = useCallback(
@@ -1966,11 +1982,11 @@ function TransactionEditUnconnected({
     }
 
     const updated = {
-      ...serializeTransaction(transaction, dateFormat),
+      ...serializeTransaction(transaction, dateFormat, currency),
       payee: nearestPayee.id,
     };
     void onUpdate(updated, 'payee');
-  }, [transactions, nearestPayee, onUpdate, dateFormat]);
+  }, [transactions, nearestPayee, onUpdate, dateFormat, currency]);
 
   if (accounts.length === 0) {
     return (

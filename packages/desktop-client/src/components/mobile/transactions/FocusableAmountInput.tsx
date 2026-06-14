@@ -11,10 +11,11 @@ import type { CSSProperties as EmotionCSSProperties } from '@actual-app/componen
 import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
+import { getDecimalPlaces } from '@actual-app/core/shared/currencies';
 import {
-  amountToCurrency,
   appendDecimals,
   currencyToAmount,
+  getNumberFormat,
   reapplyThousandSeparators,
 } from '@actual-app/core/shared/util';
 import { css } from '@emotion/css';
@@ -25,6 +26,7 @@ import { useSyncedPref } from '#hooks/useSyncedPref';
 
 type AmountInputProps = {
   value: number;
+  currency?: string;
   focused?: boolean;
   style?: CSSProperties;
   textStyle?: CSSProperties;
@@ -41,6 +43,7 @@ const AmountInput = memo(function AmountInput({
   focused,
   style,
   textStyle,
+  currency = '',
   ...props
 }: AmountInputProps) {
   const [editing, setEditing] = useState(false);
@@ -48,6 +51,17 @@ const AmountInput = memo(function AmountInput({
   const [value, setValue] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const [hideFraction] = useSyncedPref('hideFraction');
+
+  // Decimal places to display/type. hideFraction forces 0; otherwise use the
+  // currency's precision (2dp for the default '' / None currency).
+  const decimalPlaces =
+    String(hideFraction) === 'true'
+      ? 0
+      : currency
+        ? getDecimalPlaces(currency)
+        : 2;
+  const formatAmount = (amount: number) =>
+    getNumberFormat({ decimalPlaces }).formatter.format(amount);
 
   const mergedInputRef = useMergedRefs<HTMLInputElement>(
     props.inputRef,
@@ -117,7 +131,7 @@ const AmountInput = memo(function AmountInput({
 
   const onChangeText = (text: string) => {
     text = reapplyThousandSeparators(text);
-    text = appendDecimals(text, String(hideFraction) === 'true');
+    text = appendDecimals(text, decimalPlaces);
     setEditing(true);
     setText(text);
     props.onChangeValue?.(text);
@@ -160,7 +174,7 @@ const AmountInput = memo(function AmountInput({
         }}
         data-testid="amount-input-text"
       >
-        {editing ? text || amountToCurrency(0) : amountToCurrency(value)}
+        {editing ? text || formatAmount(0) : formatAmount(value)}
       </Text>
     </View>
   );
@@ -195,6 +209,16 @@ export const FocusableAmountInput = memo(function FocusableAmountInput({
 }: FocusableAmountInputProps) {
   const [isNegative, setIsNegative] = useState(true);
   const [liveValue, setLiveValue] = useState(Math.abs(value));
+  const [hideFraction] = useSyncedPref('hideFraction');
+
+  const decimalPlaces =
+    String(hideFraction) === 'true'
+      ? 0
+      : props.currency
+        ? getDecimalPlaces(props.currency)
+        : 2;
+  const formatAmount = (amount: number) =>
+    getNumberFormat({ decimalPlaces }).formatter.format(amount);
 
   const maybeApplyNegative = (amount: number, negative: boolean) => {
     const absValue = Math.abs(amount);
@@ -307,7 +331,7 @@ export const FocusableAmountInput = memo(function FocusableAmountInput({
                 ...textStyle,
               }}
             >
-              {amountToCurrency(Math.abs(value))}
+              {formatAmount(Math.abs(value))}
             </Text>
           </View>
         </Button>
