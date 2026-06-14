@@ -13,7 +13,10 @@ import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 import * as Platform from '@actual-app/core/shared/platform';
-import { amountToInteger, integerToAmount } from '@actual-app/core/shared/util';
+import {
+  amountToCurrencyInteger,
+  integerToCurrencyAmount,
+} from '@actual-app/core/shared/util';
 import { t } from 'i18next';
 
 import { BudgetMenu } from '#components/budget/tracking/BudgetMenu';
@@ -28,6 +31,7 @@ import { FocusableAmountInput } from '#components/mobile/transactions/FocusableA
 import { Notes } from '#components/Notes';
 import { useCategory } from '#hooks/useCategory';
 import { useNotes } from '#hooks/useNotes';
+import { useSyncedPref } from '#hooks/useSyncedPref';
 import type { Modal as ModalType } from '#modals/modalsSlice';
 import { trackingBudget } from '#spreadsheet/bindings';
 
@@ -69,8 +73,12 @@ export function TrackingBudgetMenuModal({
 
   const [amountFocused, setAmountFocused] = useState(false);
 
+  // Budget cells always operate in the budget's base currency. When unset
+  // ('' / None) this falls back to 2dp, matching prior behavior.
+  const [currency = ''] = useSyncedPref('defaultCurrencyCode');
+
   const _onUpdateBudget = (amount: number) => {
-    onUpdateBudget?.(amountToInteger(amount));
+    onUpdateBudget?.(amountToCurrencyInteger(amount, currency));
   };
 
   const _onEditNotes = () => {
@@ -120,7 +128,7 @@ export function TrackingBudgetMenuModal({
               <Trans>Budgeted</Trans>
             </Text>
             <FocusableAmountInput
-              value={integerToAmount(budgeted || 0)}
+              value={integerToCurrencyAmount(budgeted || 0, currency)}
               focused={amountFocused}
               onFocus={() => setAmountFocused(true)}
               onBlur={() => setAmountFocused(false)}

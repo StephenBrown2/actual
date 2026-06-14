@@ -8,8 +8,9 @@ import { styles } from '@actual-app/components/styles';
 import { View } from '@actual-app/components/view';
 import { evalArithmetic } from '@actual-app/core/shared/arithmetic';
 import {
-  amountToInteger,
+  amountToCurrencyInteger,
   integerToCurrency,
+  integerToCurrencyWithDecimal,
 } from '@actual-app/core/shared/util';
 import type { IntegerAmount } from '@actual-app/core/shared/util';
 import type { CategoryEntity } from '@actual-app/core/types/models';
@@ -20,6 +21,7 @@ import {
   removeCategoriesFromGroups,
 } from '#components/budget/util';
 import { useCategories } from '#hooks/useCategories';
+import { useSyncedPref } from '#hooks/useSyncedPref';
 
 type CoverMenuProps = {
   showToBeBudgeted?: boolean;
@@ -53,13 +55,19 @@ export function CoverMenu({
       : categoryGroups;
   }, [categoryId, showToBeBudgeted, originalCategoryGroups]);
 
-  const _initialAmount = integerToCurrency(Math.abs(initialAmount ?? 0));
+  // Budget cells always operate in the budget's base currency. When unset
+  // ('' / None) this falls back to 2dp, matching prior behavior.
+  const [currency = ''] = useSyncedPref('defaultCurrencyCode');
+
+  const _initialAmount = currency
+    ? integerToCurrencyWithDecimal(Math.abs(initialAmount ?? 0), currency)
+    : integerToCurrency(Math.abs(initialAmount ?? 0));
   const [amount, setAmount] = useState<string>(_initialAmount);
 
   function _onSubmit() {
     const parsedAmount = evalArithmetic(amount || '');
     if (parsedAmount && fromCategoryId) {
-      onSubmit(amountToInteger(parsedAmount), fromCategoryId);
+      onSubmit(amountToCurrencyInteger(parsedAmount, currency), fromCategoryId);
     }
     onClose();
   }
