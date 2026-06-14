@@ -62,6 +62,7 @@ import {
   amountToCurrency,
   currencyToAmount,
   integerToCurrency,
+  integerToCurrencyWithDecimal,
   titleFirst,
 } from '@actual-app/core/shared/util';
 import type { IntegerAmount } from '@actual-app/core/shared/util';
@@ -128,6 +129,7 @@ import { useSelectedDispatch, useSelectedItems } from '#hooks/useSelected';
 import { SheetNameProvider } from '#hooks/useSheetName';
 import { useSplitsExpanded } from '#hooks/useSplitsExpanded';
 import type { SplitsExpandedContextValue } from '#hooks/useSplitsExpanded';
+import { useSyncedPref } from '#hooks/useSyncedPref';
 import { pushModal } from '#modals/modalsSlice';
 import { NotesTagFormatter } from '#notes/NotesTagFormatter';
 import { addNotification } from '#notifications/notificationsSlice';
@@ -976,10 +978,15 @@ const Transaction = memo(function Transaction({
   const dispatchSelected = useSelectedDispatch();
   const triggerRef = useRef(null);
 
+  // Resolve the budget's base currency for decimal-aware amount I/O. When unset
+  // ('' / None) this falls back to 2dp, matching prior behavior. MC-2 will swap
+  // this for the per-account currency.
+  const [currency = ''] = useSyncedPref('defaultCurrencyCode');
+
   const [prevShowZero, setPrevShowZero] = useState(showZeroInDeposit);
   const [prevTransaction, setPrevTransaction] = useState(originalTransaction);
   const [transaction, setTransaction] = useState(() =>
-    serializeTransaction(originalTransaction, showZeroInDeposit),
+    serializeTransaction(originalTransaction, showZeroInDeposit, currency),
   );
   const isPreview = isPreviewId(transaction.id);
 
@@ -988,7 +995,7 @@ const Transaction = memo(function Transaction({
     showZeroInDeposit !== prevShowZero
   ) {
     setTransaction(
-      serializeTransaction(originalTransaction, showZeroInDeposit),
+      serializeTransaction(originalTransaction, showZeroInDeposit, currency),
     );
     setPrevTransaction(originalTransaction);
     setPrevShowZero(showZeroInDeposit);
@@ -1135,10 +1142,13 @@ const Transaction = memo(function Transaction({
       const deserialized = deserializeTransaction(
         newTransaction,
         originalTransaction,
+        currency,
       );
       // Run the transaction through the formatting so that we know
       // it's always showing the formatted result
-      setTransaction(serializeTransaction(deserialized, showZeroInDeposit));
+      setTransaction(
+        serializeTransaction(deserialized, showZeroInDeposit, currency),
+      );
 
       const deserializedName = ['credit', 'debit'].includes(name)
         ? 'amount'
@@ -1861,7 +1871,9 @@ const Transaction = memo(function Transaction({
             value={
               runningBalance == null || isChild || isTemporaryId(id)
                 ? ''
-                : integerToCurrency(runningBalance)
+                : currency
+                  ? integerToCurrencyWithDecimal(runningBalance, currency)
+                  : integerToCurrency(runningBalance)
             }
             valueStyle={{
               color:
@@ -1959,7 +1971,9 @@ const Transaction = memo(function Transaction({
                 textAlign: 'right',
               }}
             >
-              {integerToCurrency(amount)}
+              {currency
+                ? integerToCurrencyWithDecimal(amount, currency)
+                : integerToCurrency(amount)}
             </Text>
           </View>
         )}
@@ -2047,6 +2061,7 @@ function TransactionError({
   onDistributeRemainder,
   style,
 }: TransactionErrorProps) {
+  const [currency = ''] = useSyncedPref('defaultCurrencyCode');
   switch (error.type) {
     case 'SplitTransactionError':
       if (error.version === 1) {
@@ -2064,9 +2079,14 @@ function TransactionError({
             <Text style={{ whiteSpace: 'nowrap' }}>
               <Trans>Amount left:</Trans>{' '}
               <Text style={{ fontWeight: 500 }}>
-                {integerToCurrency(
-                  isDeposit ? error.difference : -error.difference,
-                )}
+                {currency
+                  ? integerToCurrencyWithDecimal(
+                      isDeposit ? error.difference : -error.difference,
+                      currency,
+                    )
+                  : integerToCurrency(
+                      isDeposit ? error.difference : -error.difference,
+                    )}
               </Text>
             </Text>
             <View style={{ flex: 1 }} />

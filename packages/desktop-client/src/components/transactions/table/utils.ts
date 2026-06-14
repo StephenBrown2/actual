@@ -1,7 +1,7 @@
 import { evalArithmetic } from '@actual-app/core/shared/arithmetic';
 import { currentDay } from '@actual-app/core/shared/months';
 import {
-  amountToInteger,
+  amountToCurrencyInteger,
   integerToCurrencyWithDecimal,
 } from '@actual-app/core/shared/util';
 import type { CurrencyAmount } from '@actual-app/core/shared/util';
@@ -31,6 +31,7 @@ export type TransactionUpdateFunction = <T extends keyof SerializedTransaction>(
 export function serializeTransaction(
   transaction: TransactionEntity,
   showZeroInDeposit?: boolean,
+  currency?: string,
 ): SerializedTransaction {
   const { amount, date: originalDate } = transaction;
 
@@ -61,14 +62,16 @@ export function serializeTransaction(
   return {
     ...transaction,
     date,
-    debit: debit != null ? integerToCurrencyWithDecimal(debit) : '',
-    credit: credit != null ? integerToCurrencyWithDecimal(credit) : '',
+    debit: debit != null ? integerToCurrencyWithDecimal(debit, currency) : '',
+    credit:
+      credit != null ? integerToCurrencyWithDecimal(credit, currency) : '',
   };
 }
 
 export function deserializeTransaction(
   transaction: SerializedTransaction,
   originalTransaction: TransactionEntity,
+  currency?: string,
 ) {
   const { debit, credit, date: originalDate, ...realTransaction } = transaction;
 
@@ -81,7 +84,9 @@ export function deserializeTransaction(
   }
 
   amount =
-    amount != null ? amountToInteger(amount) : originalTransaction.amount;
+    amount != null
+      ? amountToCurrencyInteger(amount, currency ?? '')
+      : originalTransaction.amount;
   let date = originalDate;
   if (date == null) {
     date = originalTransaction.date || currentDay();

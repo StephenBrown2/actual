@@ -1,3 +1,4 @@
+import { getDecimalPlaces } from '@actual-app/core/shared/currencies';
 import {
   dayFromDate,
   getDayMonthFormat,
@@ -8,7 +9,7 @@ import {
 import { q } from '@actual-app/core/shared/query';
 import type { Query } from '@actual-app/core/shared/query';
 import {
-  amountToInteger,
+  amountToCurrencyInteger,
   currencyToAmount,
 } from '@actual-app/core/shared/util';
 import type { AccountEntity } from '@actual-app/core/types/models';
@@ -84,6 +85,7 @@ export function transactionsSearch(
   currentQuery: Query,
   search: string,
   dateFormat: SyncedPrefs['dateFormat'],
+  currency: string = '',
 ) {
   const amount = currencyToAmount(search);
   const escapedSearch = search.replace(/[\\%?]/g, '\\$&');
@@ -108,12 +110,19 @@ export function transactionsSearch(
       $or: [
         isDateValid(parsedDate) && { date: dayFromDate(parsedDate) },
         amount != null && {
-          amount: { $transform: '$abs', $eq: amountToInteger(amount) },
+          amount: {
+            $transform: '$abs',
+            $eq: amountToCurrencyInteger(amount, currency),
+          },
         },
         amount != null &&
           Number.isInteger(amount) && {
             amount: {
-              $transform: { $abs: { $idiv: ['$', 100] } },
+              $transform: {
+                $abs: {
+                  $idiv: ['$', Math.pow(10, getDecimalPlaces(currency))],
+                },
+              },
               $eq: amount,
             },
           },

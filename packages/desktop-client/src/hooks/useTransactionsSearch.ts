@@ -9,6 +9,7 @@ type UseTransactionsSearchProps = {
   updateQuery: (updateFn: (searchQuery: Query) => Query) => void;
   resetQuery: () => void;
   dateFormat: string;
+  currency?: string;
   delayMs?: number;
 };
 type UseTransactionsSearchResult = {
@@ -20,6 +21,7 @@ export function useTransactionsSearch({
   updateQuery,
   resetQuery,
   dateFormat,
+  currency = '',
   delayMs = 150,
 }: UseTransactionsSearchProps): UseTransactionsSearchResult {
   const [isSearching, setIsSearching] = useState(false);
@@ -39,12 +41,17 @@ export function useTransactionsSearch({
         } else if (searchText) {
           resetQueryRef.current?.();
           updateQueryRef.current(previousQuery =>
-            queries.transactionsSearch(previousQuery, searchText, dateFormat),
+            queries.transactionsSearch(
+              previousQuery,
+              searchText,
+              dateFormat,
+              currency,
+            ),
           );
           setIsSearching(true);
         }
       }, delayMs),
-    [dateFormat, delayMs],
+    [currency, dateFormat, delayMs],
   );
 
   useEffect(() => {

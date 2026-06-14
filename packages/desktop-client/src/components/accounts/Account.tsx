@@ -240,6 +240,7 @@ type AccountInternalProps = {
   categoryId?: string;
   location: ReturnType<typeof useLocation>;
   dateFormat: ReturnType<typeof useDateFormat>;
+  defaultCurrencyCode: string;
   payees: PayeeEntity[];
   categoryGroups: CategoryGroupEntity[];
   hideFraction: boolean;
@@ -563,6 +564,7 @@ class AccountInternal extends PureComponent<
           this.currentQuery,
           this.state.search,
           this.props.dateFormat,
+          this.props.defaultCurrencyCode,
         ),
         true,
       );
@@ -1991,6 +1993,7 @@ export function Account() {
   const { data: accounts = [] } = useAccounts();
   const { data: payees = [] } = usePayees();
   const dateFormat = useDateFormat() || 'MM/dd/yyyy';
+  const [defaultCurrencyCode = ''] = useSyncedPref('defaultCurrencyCode');
   const [hideFraction] = useSyncedPref('hideFraction');
   const [expandSplits] = useLocalPref('expand-splits');
   const [showBalances, setShowBalances] = useSyncedPref(
@@ -2048,6 +2051,7 @@ export function Account() {
             matchedTransactions={matchedTransactions}
             accounts={accounts}
             dateFormat={dateFormat}
+            defaultCurrencyCode={defaultCurrencyCode}
             hideFraction={String(hideFraction) === 'true'}
             expandSplits={expandSplits}
             showBalances={String(showBalances) === 'true'}
