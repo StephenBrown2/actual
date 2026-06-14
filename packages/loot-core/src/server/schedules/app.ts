@@ -38,6 +38,7 @@ import {
 import type { RuleConditionEntity, ScheduleEntity } from '#types/models';
 
 import { findSchedules } from './find-schedules';
+import { schedulesToIcal } from './ical';
 import type { WallosScheduleImportItem } from './wallos-import-types';
 
 // Utilities
@@ -1524,6 +1525,20 @@ async function importWallosSchedules(
   return { successCount, errors };
 }
 
+async function exportSchedulesIcal() {
+  const { data: schedules } = await aqlQuery(
+    q('schedules').filter({ completed: false }).select('*'),
+  );
+  const { data: payeesArr } = await aqlQuery(q('payees').select('*'));
+  const { data: accountsArr } = await aqlQuery(q('accounts').select('*'));
+  const payees = Object.fromEntries(
+    payeesArr.map((p: { id: string }) => [p.id, p]),
+  );
+  const accounts = Object.fromEntries(
+    accountsArr.map((a: { id: string }) => [a.id, a]),
+  );
+  return schedulesToIcal(schedules, payees, accounts);
+}
 export type SchedulesHandlers = {
   'schedule/create': typeof createSchedule;
   'schedule/update': typeof updateSchedule;
@@ -1538,6 +1553,7 @@ export type SchedulesHandlers = {
   'schedule/export-json': typeof exportSchedulesJson;
   'schedule/import-json': typeof importSchedulesJson;
   'schedule/parse-import-json': typeof parseImportSchedulesJson;
+  'schedule/export-ical': typeof exportSchedulesIcal;
 };
 
 // Expose functions to the client
@@ -1562,6 +1578,7 @@ app.method('schedule/import-wallos', mutator(undoable(importWallosSchedules)));
 app.method('schedule/export-json', exportSchedulesJson);
 app.method('schedule/import-json', mutator(undoable(importSchedulesJson)));
 app.method('schedule/parse-import-json', parseImportSchedulesJson);
+app.method('schedule/export-ical', exportSchedulesIcal);
 
 app.service(trackJSONPaths);
 
