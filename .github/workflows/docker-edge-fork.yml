@@ -1,11 +1,11 @@
 name: Build Edge Docker Image (Fork)
 
 # Edge Docker images for forks - pushes to GHCR only (no Docker Hub)
-# Runs on every push to master in a fork, or via workflow_dispatch
+# Runs on every push to main in a fork, or via workflow_dispatch
 on:
   push:
     branches:
-      - master
+      - main
   workflow_dispatch:
 
 concurrency:
