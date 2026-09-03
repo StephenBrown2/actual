@@ -8,6 +8,7 @@ import { generateAccount } from '@actual-app/core/mocks';
 import { initServer } from '@actual-app/core/platform/client/connection';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 
+import { useFeatureFlag } from '#hooks/useFeatureFlag';
 import { SpreadsheetProvider } from '#hooks/useSpreadsheet';
 import {
   configureTestAppStore,
@@ -22,6 +23,9 @@ vi.mock(
   '@actual-app/core/platform/client/connection',
   () => import('#mocks/connection'),
 );
+vi.mock('#hooks/useFeatureFlag', () => ({
+  useFeatureFlag: vi.fn(() => false),
+}));
 
 // jsdom does not implement matchMedia, which the component uses for
 // touch-device detection
@@ -117,5 +121,42 @@ describe('sidebar Account context menu', () => {
 
     expect(store.getState().contextMenu.isOpen).toBe(true);
     expect(contextMenuItemNames()).toEqual(['account-rename', 'account-close']);
+  });
+
+  it('adds a "Change group" item and opens the account-groups modal when newSidebarUI is on', async () => {
+    vi.mocked(useFeatureFlag).mockReturnValue(true);
+    const account = generateAccount('Bank of America');
+
+    await renderRow(
+      <Account
+        name={account.name}
+        account={account}
+        to={`/accounts/${account.id}`}
+        query={bindings.accountBalance(account.id)}
+      />,
+    );
+
+    fireEvent.contextMenu(screen.getByText('Bank of America'));
+
+    expect(contextMenuItemNames()).toEqual([
+      'account-rename',
+      'account-close',
+      'account-group',
+    ]);
+
+    const items = store.getState().contextMenu.items;
+    const groupItem = items.find(
+      item => typeof item === 'object' && item.name === 'account-group',
+    );
+    act(() => {
+      (groupItem as { onClick: () => void }).onClick();
+    });
+
+    expect(store.getState().modals.modalStack).toEqual([
+      {
+        name: 'account-groups',
+        options: { accountId: account.id },
+      },
+    ]);
   });
 });

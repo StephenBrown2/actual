@@ -129,11 +129,15 @@ const InternalLink = ({
 }: InternalLinkProps) => {
   const path = to ?? '';
   const match = useMatch({ path, end: isExactPathMatch });
+  // An empty path always matches (it's a prefix of everything); a link with
+  // no `to` at all — a static label rendered through this component — must
+  // never appear "active".
+  const isActive = to != null && match;
 
   return (
     <NavLink
       to={path}
-      className={css([styles.smallText, style, match ? activeStyle : null])}
+      className={css([styles.smallText, style, isActive ? activeStyle : null])}
       onClick={e => {
         if (isDisabled) {
           e.preventDefault();
