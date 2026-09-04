@@ -5,10 +5,12 @@ import { logger } from '#platform/server/log';
 import { send } from '#server/main-app';
 import { ruleModel } from '#server/transactions/transaction-rules';
 import * as monthUtils from '#shared/months';
+import { normalizeToTitleCase } from '#shared/normalisation';
 import { q } from '#shared/query';
 import { groupBy, sortByKey } from '#shared/util';
 import type { RecurConfig, RecurPattern, RuleEntity } from '#types/models';
 
+import { resolveAccountGroups } from './account-groups';
 import type {
   Budget,
   Payee,
@@ -267,7 +269,11 @@ function buildRuleUpdate(
   };
 }
 
-function importAccounts(data: Budget, entityIdMap: Map<string, string>) {
+async function importAccounts(data: Budget, entityIdMap: Map<string, string>) {
+  const groupIds = await resolveAccountGroups(
+    data.accounts.map(account => normalizeToTitleCase(account.type)),
+  );
+
   return Promise.all(
     data.accounts.map(async account => {
       if (!account.deleted) {
@@ -278,6 +284,13 @@ function importAccounts(data: Budget, entityIdMap: Map<string, string>) {
             closed: account.closed,
           },
         });
+        const groupName = normalizeToTitleCase(account.type);
+        if (groupName) {
+          await send('api/account-update', {
+            id,
+            fields: { account_group_id: groupIds.get(groupName) },
+          });
+        }
         entityIdMap.set(account.id, id);
       }
     }),
