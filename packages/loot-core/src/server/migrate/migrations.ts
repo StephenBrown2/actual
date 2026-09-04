@@ -64,6 +64,84 @@ async function patchBadMigrations(db: Database) {
   }
 }
 
+// A fork-local migration this database may have applied before account
+// grouping shipped upstream: `account_subgroups` + `accounts.subgroup`,
+// pre-dating the `account_groups` table + `accounts.account_group_id`
+// column upstream PR #8764 actually added. No file for this id ships in
+// MIGRATIONS_DIR, so `checkDatabaseValidity` would reject any database
+// that recorded it as applied.
+const LEGACY_ACCOUNT_SUBGROUPS_MIGRATION_ID = 1771016572494;
+
+async function tableExists(db: Database, name: string): Promise<boolean> {
+  const rows = sqlite.runQuery<{ name: string }>(
+    db,
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`,
+    [name],
+    true,
+  );
+  return rows.length > 0;
+}
+
+// Drops the tracking row for the legacy migration above, so a database that
+// applied it lines up with `available` again and the real `account_groups`
+// migration runs normally. `account_subgroups` existing is our only signal
+// this database ever ran the fork-local migration — its own row was long
+// since either applied for real elsewhere or removed here.
+async function unstickLegacyAccountSubgroupsMigration(db: Database) {
+  if (await tableExists(db, 'account_subgroups')) {
+    sqlite.runQuery(db, 'DELETE FROM __migrations__ WHERE id = ?', [
+      LEGACY_ACCOUNT_SUBGROUPS_MIGRATION_ID,
+    ]);
+  }
+}
+
+// Converts data from the legacy `account_subgroups` table into
+// `account_groups` + `accounts.account_group_id`. Runs after pending
+// migrations apply, so `account_groups` is guaranteed to exist by the time
+// this runs. Drops `account_subgroups` once done, so this — and the unstick
+// step above — never run again on a database that's already been converted.
+async function migrateLegacyAccountSubgroups(db: Database) {
+  if (!(await tableExists(db, 'account_subgroups'))) {
+    return;
+  }
+
+  const subgroups = sqlite.runQuery<{
+    id: string;
+    name: string;
+    sort_order: number;
+    tombstone: number;
+  }>(
+    db,
+    'SELECT id, name, sort_order, tombstone FROM account_subgroups',
+    [],
+    true,
+  );
+
+  for (const row of subgroups) {
+    sqlite.runQuery(
+      db,
+      `INSERT INTO account_groups (id, name, sort_order, tombstone)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT (id) DO UPDATE SET
+         name = excluded.name,
+         sort_order = excluded.sort_order,
+         tombstone = excluded.tombstone`,
+      [row.id, row.name, row.sort_order, row.tombstone],
+    );
+    sqlite.runQuery(
+      db,
+      'UPDATE accounts SET account_group_id = ? WHERE subgroup = ?',
+      [row.id, row.id],
+    );
+  }
+
+  sqlite.runQuery(db, 'DROP TABLE account_subgroups');
+
+  logger.info(
+    `Migrated ${subgroups.length} legacy account group(s) from account_subgroups to account_groups`,
+  );
+}
+
 export async function getAppliedMigrations(db: Database): Promise<number[]> {
   const rows = sqlite.runQuery<{ id: number }>(
     db,
@@ -177,6 +255,7 @@ function checkDatabaseValidity(
 
 export async function migrate(db: Database): Promise<string[]> {
   await patchBadMigrations(db);
+  await unstickLegacyAccountSubgroupsMigration(db);
   const appliedIds = await getAppliedMigrations(db);
   const available = await getMigrationList(MIGRATIONS_DIR);
 
@@ -187,6 +266,8 @@ export async function migrate(db: Database): Promise<string[]> {
   for (const migration of pending) {
     await applyMigration(db, migration, MIGRATIONS_DIR);
   }
+
+  await migrateLegacyAccountSubgroups(db);
 
   return pending;
 }
