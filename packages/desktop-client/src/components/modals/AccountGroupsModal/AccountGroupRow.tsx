@@ -11,6 +11,7 @@ import { SvgPencil1 } from '@actual-app/components/icons/v2';
 import { InitialFocus } from '@actual-app/components/initial-focus';
 import { Input } from '@actual-app/components/input';
 import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 import type { AccountGroupEntity } from '@actual-app/core/types/models';
 
@@ -25,6 +26,7 @@ import { SelectedIndicator } from './SelectedIndicator';
 
 type AccountGroupRowProps = {
   group: AccountGroupEntity;
+  accountCount: number;
   selected: boolean;
   onSelect: () => void;
   onMoveUp?: () => void;
@@ -33,6 +35,7 @@ type AccountGroupRowProps = {
 
 export function AccountGroupRow({
   group,
+  accountCount,
   selected,
   onSelect,
   onMoveUp,
@@ -102,6 +105,7 @@ export function AccountGroupRow({
           </Text>
         </Button>
       )}
+      <Text style={{ color: theme.pageTextSubdued }}>{accountCount}</Text>
       {!isEditing && (
         <>
           <Button
