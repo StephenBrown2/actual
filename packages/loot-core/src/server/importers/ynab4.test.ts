@@ -199,6 +199,7 @@ describe('doImport', () => {
         case 'api/categories-get':
           return [{ id: 'income', name: 'Income' }];
         case 'api/accounts-get':
+        case 'api/account-groups-get':
         case 'api/payees-get':
           return [];
         default:
