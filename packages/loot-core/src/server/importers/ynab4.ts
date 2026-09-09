@@ -6,8 +6,10 @@ import { send } from '#server/main-app';
 import { getRecordedAmountPrecision } from '#server/util/currency';
 import { safeUnzip } from '#server/util/zip';
 import * as monthUtils from '#shared/months';
+import { normalizeToTitleCase } from '#shared/normalisation';
 import { amountToInteger, groupBy, sortByKey } from '#shared/util';
 
+import { resolveAccountGroups } from './account-groups';
 import { runImportSteps } from './progress';
 import type { ImportTick } from './progress';
 import type * as YNAB4 from './ynab4-types';
@@ -28,6 +30,9 @@ async function importAccounts(
   tick: ImportTick,
 ) {
   const accounts = sortByKey(data.accounts, 'sortableIndex');
+  const groupIds = await resolveAccountGroups(
+    accounts.map(account => normalizeToTitleCase(account.accountType)),
+  );
 
   return Promise.all(
     accounts.map(async account => {
@@ -39,6 +44,13 @@ async function importAccounts(
             closed: account.hidden ? true : false,
           },
         });
+        const groupName = normalizeToTitleCase(account.accountType);
+        if (groupName) {
+          await send('api/account-update', {
+            id,
+            fields: { account_group_id: groupIds.get(groupName) },
+          });
+        }
         entityIdMap.set(account.entityId, id);
         tick();
       }
