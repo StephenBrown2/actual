@@ -27,6 +27,7 @@ import {
 } from '#components/common/Modal';
 import { useAccount } from '#hooks/useAccount';
 import { useAccountGroups } from '#hooks/useAccountGroups';
+import { useAccounts } from '#hooks/useAccounts';
 
 import { AccountGroupRow } from './AccountGroupRow';
 import { SelectedIndicator } from './SelectedIndicator';
@@ -39,6 +40,17 @@ export function AccountGroupsModal({ accountId }: AccountGroupsModalProps) {
   const { t } = useTranslation();
   const account = useAccount(accountId);
   const { data: groups = [], isPlaceholderData } = useAccountGroups();
+  const { data: accounts = [] } = useAccounts();
+
+  const accountCountByGroupId = new Map<string, number>();
+  for (const acct of accounts) {
+    if (acct.account_group_id) {
+      accountCountByGroupId.set(
+        acct.account_group_id,
+        (accountCountByGroupId.get(acct.account_group_id) ?? 0) + 1,
+      );
+    }
+  }
 
   const createGroup = useCreateAccountGroupMutation();
   const moveGroup = useMoveAccountGroupMutation();
@@ -88,6 +100,7 @@ export function AccountGroupsModal({ accountId }: AccountGroupsModalProps) {
                 <AccountGroupRow
                   key={group.id}
                   group={group}
+                  accountCount={accountCountByGroupId.get(group.id) ?? 0}
                   selected={selectedGroupId === group.id}
                   onSelect={() => onSelect(group.id)}
                   onMoveUp={

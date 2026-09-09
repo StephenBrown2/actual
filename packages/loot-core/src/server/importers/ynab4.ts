@@ -5,8 +5,10 @@ import { logger } from '#platform/server/log';
 import { send } from '#server/main-app';
 import { safeUnzip } from '#server/util/zip';
 import * as monthUtils from '#shared/months';
+import { normalizeToTitleCase } from '#shared/normalisation';
 import { amountToInteger, groupBy, sortByKey } from '#shared/util';
 
+import { resolveAccountGroups } from './account-groups';
 import type * as YNAB4 from './ynab4-types';
 
 // Importer
@@ -16,6 +18,9 @@ async function importAccounts(
   entityIdMap: Map<string, string>,
 ) {
   const accounts = sortByKey(data.accounts, 'sortableIndex');
+  const groupIds = await resolveAccountGroups(
+    accounts.map(account => normalizeToTitleCase(account.accountType)),
+  );
 
   return Promise.all(
     accounts.map(async account => {
@@ -27,6 +32,13 @@ async function importAccounts(
             closed: account.hidden ? true : false,
           },
         });
+        const groupName = normalizeToTitleCase(account.accountType);
+        if (groupName) {
+          await send('api/account-update', {
+            id,
+            fields: { account_group_id: groupIds.get(groupName) },
+          });
+        }
         entityIdMap.set(account.entityId, id);
       }
     }),
