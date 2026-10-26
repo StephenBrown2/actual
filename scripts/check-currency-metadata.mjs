@@ -85,6 +85,18 @@ export function auditCurrencyMetadata(currencies, metadata, source) {
       ),
     ),
   );
+  // Reviewed precision for codes without CLDR tender records, such as BTC.
+  const precisionExceptions = metadata.precisionExceptions ?? {};
+  for (const [code, exception] of Object.entries(precisionExceptions)) {
+    if (
+      validCodes.has(code) ||
+      !Number.isInteger(exception?.precision) ||
+      !/^https:\/\//.test(exception.source) ||
+      !exception.reason?.trim()
+    ) {
+      errors.push(`${code} has an invalid or unreviewed precision exception`);
+    }
+  }
   const seen = new Set();
   for (const { code, decimalPlaces } of currencies) {
     if (seen.has(code)) {
@@ -97,10 +109,15 @@ export function auditCurrencyMetadata(currencies, metadata, source) {
       }
       continue;
     }
-    if (!validCodes.has(code)) {
+    if (!validCodes.has(code) && !precisionExceptions[code]) {
       errors.push(`${code} is not a valid tender currency at the review date`);
     }
-    if (decimalPlaces !== (exceptions[code] ?? defaultDigits)) {
+    if (
+      decimalPlaces !==
+      (precisionExceptions[code]?.precision ??
+        exceptions[code] ??
+        defaultDigits)
+    ) {
       errors.push(`${code} precision differs from CLDR`);
     }
   }

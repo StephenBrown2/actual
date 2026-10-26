@@ -95,6 +95,7 @@ describe('utility functions', () => {
     expect(looselyParseAmount('1.234.567', 3)).toBe(1234567);
     expect(looselyParseAmount('1,234.567', 3)).toBe(1234.567);
     expect(looselyParseAmount('1.234,567', 3)).toBe(1234.567);
+    expect(looselyParseAmount('0.001', 8)).toBe(0.001);
     expect(looselyParseAmount('3.456', 2)).toBe(3456);
     expect(looselyParseAmount('2251799813686', 3)).toBeNull();
     expect(looselyParseAmount('2251799813686', 2)).toBe(2251799813686);
@@ -278,6 +279,7 @@ describe('utility functions', () => {
     ['USD', 12.34, 1234],
     ['JPY', 1234, 1234],
     ['IRR', 1234, 1234],
+    ['BTC', 1.23456789, 123456789],
     ['XYZ', 12.34, 1234],
   ] as const)(
     'currency context %s encodes and decodes',

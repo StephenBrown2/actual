@@ -53,6 +53,7 @@ describe('currency format context', () => {
   it.each([
     ['JPY', 0, '¥', '150,000', 1500],
     ['KWD', 3, 'KWD', '150.000', 1500000],
+    ['BTC', 8, '₿', '0.00150000', 150000000000],
   ])(
     'formats inside a %s provider',
     (currencyCode, precision, symbol, shown, edited) => {
