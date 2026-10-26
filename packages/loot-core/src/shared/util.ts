@@ -589,11 +589,11 @@ export function looselyParseAmount(amount: string, precision: number) {
   }
 
   // Look for a decimal marker, then look for either 1-2 or 4-9 decimal places.
-  // Three trailing digits are a decimal fraction only for 3dp destinations.
+  // Three trailing digits are a decimal fraction for destinations with 3+ places.
   // Only digits count as places, so a currency symbol or code after the
   // number does not change how many there are.
   const m = amount.match(
-    precision === 3
+    precision >= 3
       ? /[.,](\d{1,9})[^\d.,]*$/
       : /[.,](\d{4,9}|\d{1,2})[^\d.,]*$/,
   );

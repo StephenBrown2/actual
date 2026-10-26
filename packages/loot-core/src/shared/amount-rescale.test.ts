@@ -124,6 +124,7 @@ describe('decimal amount rescale', () => {
     ['123', 0, 123],
     ['123.45', 2, 12345],
     ['-123.456', 3, -123456],
+    ['1.23456789', 8, 123456789],
   ])('rescales %s to %sdp as %s', (amount, precision, expected) => {
     expect(rescaleDecimalAmount(amount, precision)).toBe(expected);
   });

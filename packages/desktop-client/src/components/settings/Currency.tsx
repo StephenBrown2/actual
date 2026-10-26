@@ -28,6 +28,7 @@ export function useCurrencyOptions() {
         ['BDT', t('Bangladeshi Taka')],
         ['BHD', t('Bahraini Dinar')],
         ['BRL', t('Brazilian Real')],
+        ['BTC', t('Bitcoin')],
         ['BYN', t('Belarusian Ruble')],
         ['CAD', t('Canadian Dollar')],
         ['CHF', t('Swiss Franc')],

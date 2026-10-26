@@ -26,6 +26,7 @@ export const currencies: Currency[] = [
   { code: 'BDT', name: 'Bangladeshi Taka', symbol: '৳', decimalPlaces: 2, numberFormat: 'comma-dot-in', symbolFirst: true },
   { code: 'BHD', name: 'Bahraini Dinar', symbol: 'BHD', decimalPlaces: 3, numberFormat: 'comma-dot', symbolFirst: true },
   { code: 'BRL', name: 'Brazilian Real', symbol: 'R$', decimalPlaces: 2, numberFormat: 'dot-comma', symbolFirst: true },
+  { code: 'BTC', name: 'Bitcoin', symbol: '₿', decimalPlaces: 8, numberFormat: 'comma-dot', symbolFirst: true },
   { code: 'BYN', name: 'Belarusian Ruble', symbol: 'Br', decimalPlaces: 2, numberFormat: 'space-comma', symbolFirst: false },
   { code: 'CAD', name: 'Canadian Dollar', symbol: 'CA$', decimalPlaces: 2, numberFormat: 'comma-dot', symbolFirst: true },
   { code: 'CHF', name: 'Swiss Franc', symbol: 'CHF', decimalPlaces: 2, numberFormat: 'apostrophe-dot', symbolFirst: true },

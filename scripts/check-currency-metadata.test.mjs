@@ -96,6 +96,20 @@ for (const [name, mutate, message] of [
     },
     'source',
   ],
+  [
+    'an unreviewed non-tender currency',
+    m => {
+      delete m.precisionExceptions.BTC;
+    },
+    'BTC',
+  ],
+  [
+    'a precision exception without a source',
+    m => {
+      delete m.precisionExceptions.BTC.source;
+    },
+    'BTC',
+  ],
 ]) {
   void test(`rejects ${String(name)}`, () => {
     const changed = structuredClone(metadata);
