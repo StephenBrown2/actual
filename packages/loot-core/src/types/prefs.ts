@@ -11,6 +11,7 @@ export type FeatureFlag =
   | 'budgetAnalysisReport'
   | 'enableBanking'
   | 'sankeyReport'
+  | 'plaidBankSync'
   | 'mobileCalculator'
   | 'monteCarloReport';
 

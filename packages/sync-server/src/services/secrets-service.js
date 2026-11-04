@@ -19,6 +19,11 @@ export const SecretName = {
   akahu_appToken: 'akahu_appToken',
   enablebanking_applicationId: 'enablebanking_applicationId',
   enablebanking_secretKey: 'enablebanking_secretKey',
+  plaid_clientId: 'plaid_clientId',
+  plaid_secret: 'plaid_secret',
+  plaid_environment: 'plaid_environment',
+  plaid_trialPlan: 'plaid_trialPlan',
+  plaid_countryCodes: 'plaid_countryCodes',
 };
 
 function getSecretKey(name, fileId) {
