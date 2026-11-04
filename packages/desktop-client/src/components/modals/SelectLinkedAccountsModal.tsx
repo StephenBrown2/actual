@@ -24,6 +24,7 @@ import type {
   SyncServerAkahuAccount,
   SyncServerEnableBankingAccount,
   SyncServerGoCardlessAccount,
+  SyncServerPlaidAccount,
   SyncServerPluggyAiAccount,
   SyncServerSimpleFinAccount,
 } from '@actual-app/core/types/models';
@@ -33,6 +34,7 @@ import {
   useLinkAccountAkahuMutation,
   useLinkAccountEnableBankingMutation,
   useLinkAccountMutation,
+  useLinkAccountPlaidMutation,
   useLinkAccountPluggyAiMutation,
   useLinkAccountSimpleFinMutation,
   useUnlinkAccountMutation,
@@ -293,6 +295,12 @@ export type SelectLinkedAccountsModalProps =
       externalAccounts: SyncServerAkahuAccount[];
       syncSource: 'akahu';
       upgradingAccountId?: string;
+    }
+  | {
+      requisitionId?: undefined;
+      externalAccounts: SyncServerPlaidAccount[];
+      syncSource: 'plaid';
+      upgradingAccountId?: string;
     };
 
 export function SelectLinkedAccountsModal({
@@ -326,6 +334,12 @@ export function SelectLinkedAccountsModal({
           return {
             syncSource: 'akahu',
             externalAccounts: toSort as SyncServerAkahuAccount[],
+            upgradingAccountId,
+          };
+        case 'plaid':
+          return {
+            syncSource: 'plaid',
+            externalAccounts: toSort as SyncServerPlaidAccount[],
             upgradingAccountId,
           };
         case 'goCardless':
@@ -403,6 +417,7 @@ export function SelectLinkedAccountsModal({
   const linkAccountSimpleFin = useLinkAccountSimpleFinMutation();
   const linkAccountPluggyAi = useLinkAccountPluggyAiMutation();
   const linkAccountAkahu = useLinkAccountAkahuMutation();
+  const linkAccountPlaid = useLinkAccountPlaidMutation();
   const linkAccountEnableBanking = useLinkAccountEnableBankingMutation();
 
   /** A chosen destination's format: null for the budget currency. */
@@ -473,6 +488,11 @@ export function SelectLinkedAccountsModal({
         });
       case 'akahu':
         return linkAccountAkahu.mutateAsync({
+          externalAccount: props.externalAccounts[externalAccountIndex],
+          ...params,
+        });
+      case 'plaid':
+        return linkAccountPlaid.mutateAsync({
           externalAccount: props.externalAccounts[externalAccountIndex],
           ...params,
         });
@@ -962,7 +982,8 @@ type ExternalAccount =
   | SyncServerSimpleFinAccount
   | SyncServerPluggyAiAccount
   | SyncServerAkahuAccount
-  | SyncServerEnableBankingAccount;
+  | SyncServerEnableBankingAccount
+  | SyncServerPlaidAccount;
 
 type StartingBalanceInfo = {
   date: string;
@@ -1350,7 +1371,8 @@ function getInstitutionName(
     | SyncServerGoCardlessAccount
     | SyncServerSimpleFinAccount
     | SyncServerPluggyAiAccount
-    | SyncServerEnableBankingAccount,
+    | SyncServerEnableBankingAccount
+    | SyncServerPlaidAccount,
 ) {
   if (typeof externalAccount?.institution === 'string') {
     return externalAccount?.institution ?? '';

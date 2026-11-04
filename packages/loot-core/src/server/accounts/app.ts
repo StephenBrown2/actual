@@ -45,9 +45,12 @@ import type {
   CategoryEntity,
   GoCardlessToken,
   ImportTransactionEntity,
+  PlaidItem,
+  PlaidStatus,
   SyncServerAkahuAccount,
   SyncServerEnableBankingAccount,
   SyncServerGoCardlessAccount,
+  SyncServerPlaidAccount,
   SyncServerPluggyAiAccount,
   SyncServerSimpleFinAccount,
   TransactionEntity,
@@ -63,6 +66,7 @@ import {
 import { getCurrentEstimates } from './current-estimates';
 import * as link from './link';
 import { getStartingBalancePayee } from './payees';
+import { getPlaidAccounts, plaidLinkPost, plaidPost } from './plaid';
 import * as bankSync from './sync';
 
 // Shared base type for link account parameters
@@ -87,6 +91,7 @@ export type AccountHandlers = {
   'gocardless-accounts-link': typeof linkGoCardlessAccount;
   'simplefin-accounts-link': typeof linkSimpleFinAccount;
   'pluggyai-accounts-link': typeof linkPluggyAiAccount;
+  'plaid-accounts-link': typeof linkPlaidAccount;
   'akahu-accounts-link': typeof linkAkahuAccount;
   'enablebanking-accounts-link': typeof linkEnableBankingAccount;
   'account-create': typeof createAccount;
@@ -110,6 +115,13 @@ export type AccountHandlers = {
   'enablebanking-configure': typeof enableBankingConfigure;
   'simplefin-accounts': typeof simpleFinAccounts;
   'pluggyai-accounts': typeof pluggyAiAccounts;
+  'plaid-status': typeof plaidStatus;
+  'plaid-link-token': typeof plaidLinkToken;
+  'plaid-link-result': typeof plaidLinkResult;
+  'plaid-exchange': typeof plaidExchange;
+  'plaid-items': typeof plaidItems;
+  'plaid-accounts': typeof getPlaidAccounts;
+  'plaid-remove-item': typeof plaidRemoveItem;
   'akahu-accounts': typeof akahuAccounts;
   'gocardless-get-banks': typeof getGoCardlessBanks;
   'gocardless-create-web-token': typeof createGoCardlessWebToken;
@@ -468,6 +480,23 @@ async function linkPluggyAiAccount({
     syncSource: 'pluggyai',
     institution: providerInstitution(externalAccount.institution),
     bankId: externalAccount.orgDomain ?? externalAccount.orgId,
+    account: externalAccount,
+    fileId: getPrefs()?.cloudFileId,
+  });
+}
+
+async function linkPlaidAccount({
+  externalAccount,
+  ...params
+}: LinkAccountBaseParams & {
+  externalAccount: SyncServerPlaidAccount;
+}) {
+  return linkBankAccount({
+    ...params,
+    syncSource: 'plaid',
+    institution: providerInstitution(externalAccount.institution),
+    // One bank row per Plaid Item, so sync can find the Item.
+    bankId: externalAccount.itemId,
     account: externalAccount,
     fileId: getPrefs()?.cloudFileId,
   });
@@ -973,6 +1002,37 @@ async function pluggyAiStatus(): Promise<BankSyncProviderStatus> {
       ...(fileId ? { 'X-Actual-File-Id': fileId } : {}),
     },
   );
+}
+
+async function plaidStatus() {
+  return plaidPost<PlaidStatus>('/status');
+}
+
+/** Omit `itemId` for a new connection; pass it to repair or extend one. */
+async function plaidLinkToken(args: { itemId?: string }) {
+  return plaidLinkPost<{ linkToken: string; hostedLinkUrl: string }>(
+    '/link-token',
+    args,
+  );
+}
+
+async function plaidLinkResult({ linkToken }: { linkToken: string }) {
+  return plaidLinkPost<{
+    status: 'pending' | 'exited' | 'success';
+    publicToken?: string;
+  }>('/link-result', { linkToken });
+}
+
+async function plaidExchange({ publicToken }: { publicToken: string }) {
+  return plaidLinkPost<{ item: PlaidItem }>('/exchange', { publicToken });
+}
+
+async function plaidItems() {
+  return plaidLinkPost<{ items: PlaidItem[] }>('/items');
+}
+
+async function plaidRemoveItem({ itemId }: { itemId: string }) {
+  return plaidLinkPost<Record<string, never>>('/remove-item', { itemId });
 }
 
 async function akahuStatus() {
@@ -1895,6 +1955,7 @@ app.method('account-properties', getAccountProperties);
 app.method('gocardless-accounts-link', linkGoCardlessAccount);
 app.method('simplefin-accounts-link', linkSimpleFinAccount);
 app.method('pluggyai-accounts-link', linkPluggyAiAccount);
+app.method('plaid-accounts-link', linkPlaidAccount);
 app.method('akahu-accounts-link', linkAkahuAccount);
 app.method('enablebanking-accounts-link', linkEnableBankingAccount);
 app.method('account-create', mutator(undoable(createAccount)));
@@ -1918,6 +1979,13 @@ app.method('enablebanking-poll-auth-stop', stopEnableBankingPollAuth);
 app.method('enablebanking-configure', enableBankingConfigure);
 app.method('simplefin-accounts', simpleFinAccounts);
 app.method('pluggyai-accounts', pluggyAiAccounts);
+app.method('plaid-status', plaidStatus);
+app.method('plaid-link-token', plaidLinkToken);
+app.method('plaid-link-result', plaidLinkResult);
+app.method('plaid-exchange', plaidExchange);
+app.method('plaid-items', plaidItems);
+app.method('plaid-accounts', getPlaidAccounts);
+app.method('plaid-remove-item', plaidRemoveItem);
 app.method('akahu-accounts', akahuAccounts);
 app.method('gocardless-get-banks', getGoCardlessBanks);
 app.method('gocardless-create-web-token', createGoCardlessWebToken);

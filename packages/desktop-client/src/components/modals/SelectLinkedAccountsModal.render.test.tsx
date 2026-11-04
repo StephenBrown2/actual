@@ -65,6 +65,7 @@ vi.mock('#accounts', () => {
     }),
     useLinkAccountPluggyAiMutation: mutation,
     useLinkAccountAkahuMutation: mutation,
+    useLinkAccountPlaidMutation: mutation,
     useLinkAccountEnableBankingMutation: mutation,
     useUnlinkAccountMutation: () => ({ mutate: unlinkAccount }),
   };

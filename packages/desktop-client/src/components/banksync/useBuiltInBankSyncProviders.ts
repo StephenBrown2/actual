@@ -16,6 +16,7 @@ import { useCurrentAccess } from '#hooks/useCurrentAccess';
 import { useEnableBankingStatus } from '#hooks/useEnableBankingStatus';
 import { useFeatureFlag } from '#hooks/useFeatureFlag';
 import { useGoCardlessStatus } from '#hooks/useGoCardlessStatus';
+import { usePlaidStatus } from '#hooks/usePlaidStatus';
 import { usePluggyAiStatus } from '#hooks/usePluggyAiStatus';
 import { useSimpleFinStatus } from '#hooks/useSimpleFinStatus';
 import { useSyncServerStatus } from '#hooks/useSyncServerStatus';
@@ -125,10 +126,12 @@ export function useBuiltInBankSyncProviders({
   const [loadingAkahuAccounts, setLoadingAkahuAccounts] = useState(false);
 
   const enableBankingEnabled = useFeatureFlag('enableBanking');
+  const plaidEnabled = useFeatureFlag('plaidBankSync');
   const { configuredGoCardless } = useGoCardlessStatus();
   const { simpleFinStatus, setSimpleFinStatus } = useSimpleFinStatus();
   const { pluggyAiStatus, setPluggyAiStatus } = usePluggyAiStatus();
   const { configuredAkahu } = useAkahuStatus();
+  const { plaidStatus, setPlaidStatus } = usePlaidStatus(plaidEnabled);
   const { configuredEnableBanking, isLoading: isEnableBankingLoading } =
     useEnableBankingStatus(enableBankingEnabled);
 
@@ -211,6 +214,22 @@ export function useBuiltInBankSyncProviders({
       }),
     );
   }, [dispatch, pluggyAiStatus.source, setPluggyAiStatus]);
+
+  function onPlaidInit() {
+    dispatch(
+      pushModal({
+        modal: {
+          name: 'plaid-init',
+          options: {
+            onSuccess: setPlaidStatus,
+            configured: plaidStatus.configured ?? false,
+            trialPlan: plaidStatus.trialPlan ?? false,
+            countryCodes: plaidStatus.countryCodes ?? ['US'],
+          },
+        },
+      }),
+    );
+  }
 
   const onEnableBankingInit = useCallback(() => {
     dispatch(
@@ -356,6 +375,49 @@ export function useBuiltInBankSyncProviders({
     setPluggyAiStatus,
     t,
   ]);
+
+  async function onPlaidReset() {
+    try {
+      const fileId =
+        plaidStatus.source === 'per-budget-file' ? cloudFileId : null;
+      if (plaidStatus.source === 'per-budget-file' && !fileId) {
+        throw new Error(t('Budget file ID is required.'));
+      }
+      for (const name of [
+        'plaid_clientId',
+        'plaid_secret',
+        'plaid_environment',
+        'plaid_trialPlan',
+        'plaid_countryCodes',
+      ]) {
+        await ensureSuccessResponse(
+          await send('secret-set', { name, value: null, fileId }),
+          `Failed to clear ${name}`,
+        );
+      }
+      setPlaidStatus(await send('plaid-status'));
+    } catch (error) {
+      notifyResetFailure('Plaid', error);
+    }
+  }
+
+  function onConnectPlaid() {
+    if (!plaidStatus.configured) {
+      onPlaidInit();
+      return;
+    }
+    dispatch(
+      pushModal({
+        modal: {
+          name: 'plaid-link',
+          options: {
+            trialPlan: plaidStatus.trialPlan ?? false,
+            upgradingAccountId,
+          },
+        },
+      }),
+    );
+  }
 
   const onEnableBankingReset = useCallback(async () => {
     try {
@@ -672,6 +734,7 @@ export function useBuiltInBankSyncProviders({
     pluggyai: Boolean(pluggyAiStatus.configured),
     enableBanking: Boolean(isEnableBankingSetupComplete),
     akahu: Boolean(isAkahuSetupComplete),
+    plaid: Boolean(plaidStatus.configured),
   } satisfies Record<BankSyncProviders, boolean>;
 
   const providers = useMemo<BuiltInBankSyncProviderState[]>(() => {
@@ -808,7 +871,27 @@ export function useBuiltInBankSyncProviders({
   );
 
   return {
-    providers,
+    providers: plaidEnabled
+      ? [
+          ...providers,
+          {
+            id: 'plaid',
+            displayName: 'Plaid',
+            description: t(
+              'Link a bank account in the US, Canada, the UK or Europe to automatically download transactions.',
+            ),
+            isConfigured: configuredProviders.plaid,
+            credentialSource: plaidStatus.source ?? 'global',
+            supportsPerBudgetFile: true,
+            canConfigure:
+              syncServerStatus === 'online' &&
+              (isAdmin || (isFileOwner && plaidStatus.source !== 'global')),
+            onConfigure: onPlaidInit,
+            onLink: onConnectPlaid,
+            onReset: onPlaidReset,
+          } satisfies BuiltInBankSyncProviderState,
+        ]
+      : providers,
     syncServerStatus,
     permissionWarning,
   };

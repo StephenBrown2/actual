@@ -83,6 +83,8 @@ import { OpenIDEnableModal } from './modals/OpenIDEnableModal';
 import { OutOfSyncMigrationsModal } from './modals/OutOfSyncMigrationsModal';
 import { PasswordEnableModal } from './modals/PasswordEnableModal';
 import { PayeeAutocompleteModal } from './modals/PayeeAutocompleteModal';
+import { PlaidInitialiseModal } from './modals/PlaidInitialiseModal';
+import { PlaidLinkModal } from './modals/PlaidLinkModal';
 import { PluggyAiInitialiseModal } from './modals/PluggyAiInitialiseModal';
 import { ScheduledTransactionMenuModal } from './modals/ScheduledTransactionMenuModal';
 import { SelectLinkedAccountsModal } from './modals/SelectLinkedAccountsModal';
@@ -240,6 +242,12 @@ export function Modals() {
 
         case 'pluggyai-init':
           return <PluggyAiInitialiseModal key={key} {...modal.options} />;
+
+        case 'plaid-init':
+          return <PlaidInitialiseModal key={key} {...modal.options} />;
+
+        case 'plaid-link':
+          return <PlaidLinkModal key={key} {...modal.options} />;
 
         case 'akahu-init':
           return <AkahuInitialiseModal key={key} {...modal.options} />;

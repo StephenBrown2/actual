@@ -9,6 +9,7 @@ type ServerConfig = {
   GOCARDLESS_SERVER: string;
   SIMPLEFIN_SERVER: string;
   PLUGGYAI_SERVER: string;
+  PLAID_SERVER: string;
   AKAHU_SERVER: string;
   ENABLEBANKING_SERVER: string;
   EXCHANGE_RATES_SERVER: string;
@@ -50,6 +51,7 @@ export function getServer(url?: string): ServerConfig | null {
         GOCARDLESS_SERVER: joinURL(url, '/gocardless'),
         SIMPLEFIN_SERVER: joinURL(url, '/simplefin'),
         PLUGGYAI_SERVER: joinURL(url, '/pluggyai'),
+        PLAID_SERVER: joinURL(url, '/plaid'),
         AKAHU_SERVER: joinURL(url, '/akahu'),
         ENABLEBANKING_SERVER: joinURL(url, '/enablebanking'),
         EXCHANGE_RATES_SERVER: joinURL(url, '/exchange-rates'),
