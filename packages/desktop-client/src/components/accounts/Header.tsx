@@ -776,6 +776,7 @@ type AccountMenuProps = {
     item:
       | 'link'
       | 'unlink'
+      | 'remove-plaid'
       | 'close'
       | 'reopen'
       | 'export'
@@ -850,6 +851,14 @@ function AccountMenu({
                   name: 'unlink',
                   text: t('Unlink account'),
                 } as const,
+                ...(account.account_sync_source === 'plaid'
+                  ? [
+                      {
+                        name: 'remove-plaid',
+                        text: t('Remove from Plaid'),
+                      } as const,
+                    ]
+                  : []),
               ]
             : syncServerStatus === 'online'
               ? [

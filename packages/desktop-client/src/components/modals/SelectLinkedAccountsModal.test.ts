@@ -1,3 +1,4 @@
+import { currentDay, subDays } from '@actual-app/core/shared/months';
 import type {
   AccountEntity,
   SyncServerSimpleFinAccount,
@@ -165,6 +166,17 @@ describe('getSelectableAccountOptions', () => {
       'Create new account',
       'Create new account (off budget)',
     ]);
+  });
+});
+
+describe('getDefaultStartingSettings by provider', () => {
+  it('starts Plaid at the 30 days it loads first, others at 90', () => {
+    expect(getDefaultStartingSettings('plaid').date).toBe(
+      subDays(currentDay(), 29),
+    );
+    expect(getDefaultStartingSettings('simpleFin').date).toBe(
+      subDays(currentDay(), 89),
+    );
   });
 });
 

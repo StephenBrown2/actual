@@ -68,6 +68,7 @@ export type SyncedPrefs = Partial<
     | `sync-import-notes-${string}`
     | `sync-import-transactions-${string}`
     | `sync-update-dates-${string}`
+    | `plaid-cursor-${string}`
     | `ofx-fallback-missing-payee-${string}`
     | `ofx-swap-payee-memo-${string}`
     | `qif-swap-payee-memo-${string}`

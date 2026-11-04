@@ -18,6 +18,8 @@ const mockDispatch = vi.fn();
 vi.mock('react-router', async importOriginal => ({
   ...(await importOriginal()),
   useParams: () => ({ id: 'acc-1' }),
+  useLocation: () => ({ pathname: '/accounts/acc-1' }),
+  useNavigate: () => vi.fn(),
 }));
 
 vi.mock('#hooks/useAccounts', () => ({
