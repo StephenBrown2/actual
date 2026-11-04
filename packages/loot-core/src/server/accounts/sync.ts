@@ -51,6 +51,7 @@ import type {
 
 import { findScheduledExchange } from './exchange-import';
 import { getStartingBalancePayee } from './payees';
+import { downloadPlaidBalance } from './plaid';
 import { title } from './title';
 
 function BankSyncError(type: string, code: string, details?: object) {
@@ -1465,7 +1466,7 @@ export async function processBankSyncDownload(
   if (initialSync) {
     const { transactions } = download;
     let balanceToUse =
-      currentBalance === null
+      currentBalance === null && acctRow.account_sync_source === 'enableBanking'
         ? null
         : encodeStartingBalance(currentBalance, [], amountPrecision);
 
@@ -1916,6 +1917,8 @@ export async function downloadBankSyncAccount(
     );
   } else if (syncSource === 'akahu') {
     download = await downloadAkahuTransactions(acctId, syncStartDate);
+  } else if (syncSource === 'plaid') {
+    download = await downloadPlaidBalance(acctId, bankId);
   } else if (syncSource === 'goCardless') {
     download = await downloadGoCardlessTransactions(
       userId,

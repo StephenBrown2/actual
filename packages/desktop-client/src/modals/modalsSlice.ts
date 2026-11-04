@@ -11,6 +11,7 @@ import type {
   NewRuleEntity,
   NewUserEntity,
   NoteEntity,
+  PlaidStatus,
   RuleEntity,
   ScheduleEntity,
   SyncServerEnableBankingAccount,
@@ -143,6 +144,23 @@ export type Modal =
       options: {
         onSuccess: (perBudgetFile: boolean) => void;
         credentialSource: BankSyncCredentialSource;
+      };
+    }
+  | {
+      name: 'plaid-init';
+      options: {
+        onSuccess: (status: PlaidStatus) => void;
+        /** Whether Plaid credentials exist for this budget or globally. */
+        configured: boolean;
+        trialPlan: boolean;
+        countryCodes: string[];
+      };
+    }
+  | {
+      name: 'plaid-link';
+      options: {
+        trialPlan: boolean;
+        upgradingAccountId?: AccountEntity['id'];
       };
     }
   | {
