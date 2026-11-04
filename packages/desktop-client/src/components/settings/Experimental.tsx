@@ -173,6 +173,7 @@ export function ExperimentalFeatures() {
     localStorage.getItem('devEnableServerPrefs') === 'true';
   // Only the web app has a choice of storage engine
   const showStoragePrefs = !isElectron();
+  const isUsingServer = useSyncServerStatus() !== 'no-server';
 
   return (
     <SettingsGroup
@@ -279,6 +280,11 @@ export function ExperimentalFeatures() {
       >
         <Trans>Monte Carlo Analysis Report</Trans>
       </FeatureToggle>
+      {isUsingServer && (
+        <FeatureToggle flag="plaidBankSync">
+          <Trans>Plaid Bank Sync</Trans>
+        </FeatureToggle>
+      )}
       {showServerPrefs && (
         <ServerFeatureToggle
           prefName="flags.plugins"

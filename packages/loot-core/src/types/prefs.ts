@@ -10,6 +10,7 @@ export type FeatureFlag =
   | 'customThemes'
   | 'budgetAnalysisReport'
   | 'sankeyReport'
+  | 'plaidBankSync'
   | 'mobileCalculator'
   | 'monteCarloReport';
 
