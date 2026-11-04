@@ -8,6 +8,7 @@ import type { Diff } from '#shared/util';
 import type { PayeeEntity, TransactionEntity } from '#types/models';
 
 import { preflightTransactionWrites, queuedAccount } from './foreign-guard';
+import type { TransactionWriteOptions } from './foreign-guard';
 import * as rules from './transaction-rules';
 import * as transfer from './transfer';
 
@@ -56,12 +57,15 @@ export async function batchUpdateTransactions({
   detectOrphanPayees = true,
   runTransfers = true,
   exchangeReplacements,
+  foreignEdits,
 }: Partial<Diff<TransactionEntity>> & {
   learnCategories?: boolean;
   detectOrphanPayees?: boolean;
   runTransfers?: boolean;
   /** Exchange legs whose amount an import replaces. */
   exchangeReplacements?: ReadonlySet<string>;
+  /** Foreign rows whose pair an import changes to exact values. */
+  foreignEdits?: TransactionWriteOptions['foreignEdits'];
 }) {
   // A tombstoning update is a deletion, so it gets the same child and
   // transfer cleanup.
@@ -90,7 +94,7 @@ export async function batchUpdateTransactions({
   // counterparts its new foreign transfers will get.
   await preflightTransactionWrites(
     { added, updated, deleted },
-    { runTransfers, exchangeReplacements },
+    { runTransfers, exchangeReplacements, foreignEdits },
   );
   if (runTransfers) {
     await transfer.preflightNewForeignTransfers(added ?? [], updated ?? []);
@@ -172,6 +176,7 @@ export async function batchUpdateTransactions({
           await db.updateTransaction(t, {
             validatedTransfer: true,
             exchangeReplacements,
+            foreignEdits,
           });
         }),
       );

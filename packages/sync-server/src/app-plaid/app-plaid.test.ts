@@ -405,3 +405,263 @@ describe('Plaid Items', () => {
     ).toMatchObject({ error_message: 'an unexpected error occurred' });
   });
 });
+
+describe('Plaid transactions', () => {
+  function plaidTransaction(overrides: Record<string, unknown> = {}) {
+    return {
+      transaction_id: 'txn-1',
+      account_id: 'acc-1',
+      amount: 12.5,
+      iso_currency_code: 'USD',
+      unofficial_currency_code: null,
+      date: '2026-03-01',
+      name: 'SQ *COFFEE',
+      merchant_name: 'Coffee',
+      pending: false,
+      pending_transaction_id: null,
+      ...overrides,
+    };
+  }
+
+  function page(overrides: Record<string, unknown> = {}) {
+    return {
+      added: [],
+      modified: [],
+      removed: [],
+      accounts: [
+        {
+          account_id: 'acc-1',
+          type: 'credit',
+          balances: {
+            current: 100,
+            iso_currency_code: 'USD',
+            unofficial_currency_code: null,
+          },
+        },
+      ],
+      next_cursor: 'cursor-1',
+      has_more: false,
+      transactions_update_status: 'HISTORICAL_UPDATE_COMPLETE',
+      ...overrides,
+    };
+  }
+
+  const request = { itemId: 'item-1', accountId: 'acc-1' };
+
+  beforeEach(() => {
+    setCredentials('global-client');
+    writeItems({ 'item-1': storedItem() });
+  });
+
+  it('maps added and modified rows and ignores removed ones', async () => {
+    mockPlaid({
+      '/transactions/sync': () =>
+        page({
+          added: [
+            plaidTransaction({
+              transaction_id: 'pending-1',
+              pending: true,
+              date: '2026-03-02',
+            }),
+            plaidTransaction({
+              transaction_id: 'posted-1',
+              amount: -40,
+              merchant_name: null,
+              name: 'PAYROLL',
+              pending_transaction_id: 'pending-0',
+            }),
+          ],
+          modified: [
+            plaidTransaction({
+              transaction_id: 'posted-0',
+              date: '2026-02-01',
+            }),
+          ],
+          removed: [{ transaction_id: 'pending-0', account_id: 'acc-1' }],
+        }),
+    });
+
+    const res = await post('/transactions', request);
+
+    expect(calls[0].body).toMatchObject({
+      access_token: 'access-sandbox-1',
+      options: { account_id: 'acc-1' },
+    });
+    expect(calls[0].body.cursor).toBeUndefined();
+    const { transactions, ...balances } = res.body.data;
+    expect(balances).toEqual({
+      balances: [
+        {
+          balanceAmount: { amount: '-100', currency: 'USD' },
+          balanceType: 'expected',
+        },
+      ],
+      startingBalance: '-100',
+      startingBalanceCurrency: 'USD',
+      nextCursor: 'cursor-1',
+    });
+    // Newest first, with Plaid's outflow-positive sign inverted.
+    expect(transactions.all).toEqual([
+      {
+        transactionId: 'pending-1',
+        booked: false,
+        date: '2026-03-02',
+        payeeName: 'Coffee',
+        transactionAmount: { amount: '-12.5', currency: 'USD' },
+      },
+      {
+        transactionId: 'posted-1',
+        booked: true,
+        date: '2026-03-01',
+        payeeName: 'PAYROLL',
+        transactionAmount: { amount: '40', currency: 'USD' },
+        pendingTransactionId: 'pending-0',
+      },
+      {
+        transactionId: 'posted-0',
+        booked: true,
+        date: '2026-02-01',
+        payeeName: 'Coffee',
+        transactionAmount: { amount: '-12.5', currency: 'USD' },
+      },
+    ]);
+    expect(transactions.pending).toEqual([transactions.all[0]]);
+    expect(transactions.booked).toEqual(transactions.all.slice(1));
+  });
+
+  it('pages to the end from the given cursor', async () => {
+    mockPlaid({
+      '/transactions/sync': body =>
+        body.cursor === 'cursor-1'
+          ? page({
+              added: [plaidTransaction({ transaction_id: 'txn-2' })],
+              next_cursor: 'cursor-2',
+            })
+          : // A cursor request continues whatever history Plaid holds.
+            page({
+              added: [plaidTransaction()],
+              has_more: true,
+              next_cursor: 'cursor-1',
+              transactions_update_status: 'INITIAL_UPDATE_COMPLETE',
+            }),
+    });
+
+    const res = await post('/transactions', {
+      ...request,
+      cursor: 'cursor-0',
+    });
+
+    expect(calls.map(call => call.body.cursor)).toEqual([
+      'cursor-0',
+      'cursor-1',
+    ]);
+    expect(
+      res.body.data.transactions.all.map(
+        (trans: { transactionId: string }) => trans.transactionId,
+      ),
+    ).toEqual(['txn-1', 'txn-2']);
+    expect(res.body.data.nextCursor).toBe('cursor-2');
+  });
+
+  it.each(['NOT_READY', 'INITIAL_UPDATE_COMPLETE'])(
+    'reports pending history on %s without a cursor',
+    async status => {
+      mockPlaid({
+        '/transactions/sync': () =>
+          page({
+            added: [plaidTransaction()],
+            transactions_update_status: status,
+          }),
+      });
+
+      const res = await post('/transactions', request);
+
+      expect(res.body.data).toEqual({ historyPending: true });
+    },
+  );
+
+  it('takes the last 30 days once Plaid has them', async () => {
+    mockPlaid({
+      '/transactions/sync': () =>
+        page({
+          added: [plaidTransaction()],
+          transactions_update_status: 'INITIAL_UPDATE_COMPLETE',
+        }),
+    });
+    const startDate = new Date(Date.now() - 29 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+
+    const recent = await post('/transactions', { ...request, startDate });
+    const older = await post('/transactions', {
+      ...request,
+      startDate: '2020-01-01',
+    });
+
+    expect(recent.body.data.historyPending).toBeUndefined();
+    expect(recent.body.data.transactions.all).toHaveLength(1);
+    expect(older.body.data).toEqual({ historyPending: true });
+  });
+
+  it('reads the balance from /accounts/get for an account missing from the sync', async () => {
+    mockPlaid({
+      '/transactions/sync': () => page({ accounts: [] }),
+      '/accounts/get': () => ({
+        accounts: [
+          {
+            account_id: 'acc-1',
+            type: 'loan',
+            balances: {
+              current: 250,
+              iso_currency_code: null,
+              unofficial_currency_code: 'BTC',
+            },
+          },
+        ],
+      }),
+    });
+
+    const res = await post('/transactions', request);
+
+    expect(calls[1]).toEqual({
+      path: '/accounts/get',
+      body: expect.objectContaining({
+        access_token: 'access-sandbox-1',
+        options: { account_ids: ['acc-1'] },
+      }),
+    });
+    expect(res.body.data).toMatchObject({
+      startingBalance: '-250',
+      startingBalanceCurrency: 'BTC',
+    });
+  });
+
+  it('returns no cursor when a later page fails', async () => {
+    mockPlaid({
+      '/transactions/sync': body =>
+        body.cursor === 'cursor-1'
+          ? { error_code: 'TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION' }
+          : page({ has_more: true, next_cursor: 'cursor-1' }),
+    });
+
+    const res = await post('/transactions', request);
+
+    expect(res.body.data).toMatchObject({ error_code: 'INTERNAL_ERROR' });
+    expect(res.body.data.nextCursor).toBeUndefined();
+  });
+
+  it.each(['ITEM_LOGIN_REQUIRED', 'PENDING_EXPIRATION'])(
+    'asks for a new login on %s',
+    async code => {
+      mockPlaid({ '/transactions/sync': () => ({ error_code: code }) });
+
+      const res = await post('/transactions', request);
+
+      expect(res.body.data).toEqual({
+        error_type: 'ITEM_ERROR',
+        error_code: 'ITEM_LOGIN_REQUIRED',
+        error_message: code,
+      });
+    },
+  );
+});

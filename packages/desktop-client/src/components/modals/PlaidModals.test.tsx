@@ -106,7 +106,7 @@ describe('PlaidLinkModal with Hosted Link', () => {
     });
     render(
       <TestProviders>
-        <PlaidLinkModal trialPlan={false} />
+        <PlaidLinkModal />
       </TestProviders>,
     );
 
@@ -159,6 +159,31 @@ describe('PlaidLinkModal with Hosted Link', () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(window.Actual.openURLInBrowser).not.toHaveBeenCalled();
+  });
+
+  it('asks the bank again in update mode', async () => {
+    const linkToken = vi.fn(async () => ({
+      linkToken: 'link-1',
+      hostedLinkUrl: 'https://secure.plaid.com/hl/1',
+    }));
+    initServer({
+      'plaid-link-token': linkToken,
+      'plaid-link-result': async () => ({ status: 'exited' }),
+    });
+    render(
+      <TestProviders>
+        <PlaidLinkModal update={{ itemId: 'item-1' }} />
+      </TestProviders>,
+    );
+
+    expect(screen.getByText(/log in to your bank again/)).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    await screen.findByText(/Finish in the Plaid window/);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(
+      await screen.findByText('Plaid was closed before linking finished.'),
+    ).toBeVisible();
+    expect(linkToken).toHaveBeenCalledWith({ itemId: 'item-1' });
   });
 });
 

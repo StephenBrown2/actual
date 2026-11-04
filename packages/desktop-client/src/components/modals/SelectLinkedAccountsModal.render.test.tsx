@@ -12,6 +12,7 @@ import { mergeSyncedPrefs } from '#prefs/prefsSlice';
 import { SelectLinkedAccountsModal } from './SelectLinkedAccountsModal';
 
 const linkSimpleFin = vi.fn();
+const linkPlaid = vi.hoisted(() => vi.fn());
 const unlinkAccount = vi.hoisted(() => vi.fn());
 const narrow = vi.hoisted(() => ({ value: true }));
 const startingBalanceRows = vi.hoisted(() => ({
@@ -65,7 +66,10 @@ vi.mock('#accounts', () => {
     }),
     useLinkAccountPluggyAiMutation: mutation,
     useLinkAccountAkahuMutation: mutation,
-    useLinkAccountPlaidMutation: mutation,
+    useLinkAccountPlaidMutation: () => ({
+      mutate: vi.fn(),
+      mutateAsync: linkPlaid,
+    }),
     useLinkAccountEnableBankingMutation: mutation,
     useUnlinkAccountMutation: () => ({ mutate: unlinkAccount }),
   };
@@ -233,6 +237,48 @@ it('keeps the dialog open when a foreign link fails', async () => {
   ).toBeInTheDocument();
   expect(closeModal).not.toHaveBeenCalled();
   expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+});
+
+it('waits for a Plaid link and reports a history timeout', async () => {
+  let finish: ((result: { type: 'history-timeout' }) => void) | undefined;
+  linkPlaid.mockReturnValueOnce(
+    new Promise(resolve => {
+      finish = resolve;
+    }),
+  );
+  localAccounts.value = [
+    yenAccount({ id: 'usd', currency: null, currency_precision: null }),
+  ];
+  render(
+    <TestProviders store={createTestAppStore()}>
+      <SelectLinkedAccountsModal
+        syncSource="plaid"
+        externalAccounts={[
+          {
+            account_id: 'remote',
+            name: 'Checking',
+            official_name: null,
+            mask: null,
+            balance: 100,
+            currency: 'USD',
+            institution: 'Bank',
+            itemId: 'item-1',
+          },
+        ]}
+        upgradingAccountId="usd"
+      />
+    </TestProviders>,
+  );
+
+  fireEvent.click(screen.getByRole('button', { name: 'Link accounts' }));
+  expect(
+    await screen.findByText(/Waiting for the bank's transaction history/),
+  ).toBeInTheDocument();
+  finish?.({ type: 'history-timeout' });
+  expect(
+    await screen.findByText(/has not sent this account's transaction history/),
+  ).toBeInTheDocument();
+  expect(closeModal).not.toHaveBeenCalled();
 });
 
 it('does not preselect an account in another currency', () => {

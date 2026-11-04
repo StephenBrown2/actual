@@ -91,6 +91,7 @@ import {
 import type { ConfirmTransactionEditReason } from '#modals/modalsSlice';
 import { addNotification } from '#notifications/notificationsSlice';
 import { useCreatePayeeMutation } from '#payees';
+import { removePlaidConnection } from '#plaid';
 import * as queries from '#queries';
 import { aqlQuery } from '#queries/aqlQuery';
 import { pagedQuery } from '#queries/pagedQuery';
@@ -912,6 +913,7 @@ class AccountInternal extends PureComponent<
     item:
       | 'link'
       | 'unlink'
+      | 'remove-plaid'
       | 'close'
       | 'reopen'
       | 'export'
@@ -950,6 +952,27 @@ class AccountInternal extends PureComponent<
                 isViewBankSyncSettings: false,
                 onUnlink: () => {
                   this.props.onUnlinkAccount(accountId);
+                },
+              },
+            },
+          }),
+        );
+        break;
+      case 'remove-plaid':
+        this.props.dispatch(
+          pushModal({
+            modal: {
+              name: 'confirm-delete',
+              options: {
+                message: t(
+                  'Remove this bank connection from Plaid? Every account using it stops syncing, in every budget. On the Plaid Trial plan, removing a connection does not give back its slot.',
+                ),
+                onConfirm: async () => {
+                  if (
+                    await removePlaidConnection(this.props.dispatch, accountId)
+                  ) {
+                    this.props.onUnlinkAccount(accountId);
+                  }
                 },
               },
             },

@@ -3,6 +3,8 @@
 // are specific to the AQL query framework and does not necessarily
 // match the actual database schema.
 
+import type { AccountSyncSource } from '#types/models';
+
 type JsonString = string;
 
 export type DbAccount = {
@@ -21,7 +23,7 @@ export type DbAccount = {
   type?: string | null;
   subtype?: string | null;
   bank?: string | null;
-  account_sync_source?: 'simpleFin' | 'goCardless' | null;
+  account_sync_source?: AccountSyncSource | null;
   last_reconciled?: string | null;
   last_sync?: string | null;
   bank_sync_status?:

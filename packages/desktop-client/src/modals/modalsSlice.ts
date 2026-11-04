@@ -154,8 +154,10 @@ export type Modal =
   | {
       name: 'plaid-link';
       options: {
-        trialPlan: boolean;
+        trialPlan?: boolean;
         upgradingAccountId?: AccountEntity['id'];
+        /** Update mode on an existing Item, to log in to the bank again. */
+        update?: { itemId: string };
       };
     }
   | {

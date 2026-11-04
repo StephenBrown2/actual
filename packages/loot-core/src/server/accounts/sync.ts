@@ -24,6 +24,7 @@ import {
   queuedAccount,
   replaceExchangeTotal,
 } from '#server/transactions/foreign-guard';
+import type { ForeignEdit } from '#server/transactions/foreign-guard';
 import { runRules } from '#server/transactions/transaction-rules';
 import { getRecordedAmountPrecision } from '#server/util/currency';
 import {
@@ -50,7 +51,7 @@ import type {
 
 import { findScheduledExchange } from './exchange-import';
 import { getStartingBalancePayee } from './payees';
-import { downloadPlaidBalance } from './plaid';
+import { plaidDefaultStartDate, plaidPost } from './plaid';
 import { title } from './title';
 
 function BankSyncError(type: string, code: string, details?: object) {
@@ -367,6 +368,62 @@ async function downloadPluggyAiTransactions(
   return retVal;
 }
 
+/** A new account asks for full history; others continue from the cursor. */
+async function downloadPlaidTransactions(
+  id: AccountEntity['id'],
+  acctId: string,
+  itemId: string,
+  newAccount: boolean,
+  syncStartDate: string,
+) {
+  const cursor = newAccount
+    ? undefined
+    : (
+        await db.first<Pick<db.DbPreference, 'value'>>(
+          'SELECT value FROM preferences WHERE id = ?',
+          [`plaid-cursor-${id}`],
+        )
+      )?.value;
+  const res = await plaidPost<BankSyncResponse>('/transactions', {
+    itemId,
+    accountId: acctId,
+    ...(cursor ? { cursor } : { startDate: syncStartDate }),
+  });
+  if (res.error_code) {
+    throw BankSyncError(res.error_type, res.error_code);
+  }
+  if (res.historyPending) {
+    return { historyPending: true, transactions: [] };
+  }
+  // Plaid keeps sending older history after the link, so rows before the
+  // start date are dropped and the starting balance stays right.
+  return {
+    transactions: res.transactions.all.filter(
+      trans => !trans.date || trans.date >= syncStartDate,
+    ),
+    accountBalance: res.balances,
+    startingBalance: res.startingBalance,
+    startingBalanceCurrency: res.startingBalanceCurrency,
+    nextCursor: res.nextCursor,
+  };
+}
+
+/**
+ * Saved with the import it belongs to, so a failed import leaves the old
+ * cursor and the next sync downloads the same rows again.
+ */
+async function savePlaidCursor(
+  id: AccountEntity['id'],
+  download: { nextCursor?: string },
+) {
+  if (download.nextCursor) {
+    await db.update('preferences', {
+      id: `plaid-cursor-${id}`,
+      value: download.nextCursor,
+    });
+  }
+}
+
 async function downloadAkahuTransactions(
   acctId: AccountEntity['id'],
   since: string,
@@ -654,6 +711,7 @@ async function normalizeBankSyncTransactions(
         cleared: trans.cleared,
         raw_synced_data: JSON.stringify(trans),
       },
+      pendingTransactionId: trans.pendingTransactionId,
     });
   }
 
@@ -730,6 +788,8 @@ export async function reconcileTransactions(
   const updatedPreview = [];
   // Scheduled exchange legs whose amount the import replaces.
   const exchangeReplacements = new Set<string>();
+  // Foreign pairs are frozen, so a posted amount is authorized row by row.
+  const foreignEdits = new Map<string, ForeignEdit>();
   const existingPayeeMap = new Map<string, string>();
 
   const {
@@ -748,7 +808,7 @@ export async function reconcileTransactions(
 
   // Finally, generate & commit the changes
   for (const step of transactionsStep3) {
-    const { trans, subtransactions } = step;
+    const { trans, subtransactions, pendingMatch, matchAccount } = step;
     let { match } = step;
     // A skipped transaction still takes part in the matching above, so the
     // other transactions match the same way as in the import preview. It is
@@ -796,8 +856,50 @@ export async function reconcileTransactions(
         date: db.fromDateRepr(match.date),
       };
 
+      // A posted row replacing its pending row takes the posted amount; a
+      // foreign row's base comes from the rate for its final date, as for a
+      // new row. A split parent keeps its amount so its children still sum to it.
+      let postedAmount: { amount: number; transaction_amount?: number } | null =
+        null;
+      if (pendingMatch && !exchangeRow && !match.is_parent) {
+        if (!foreign) {
+          postedAmount = { amount: trans.amount };
+        } else {
+          const date = updateDates && trans.date ? trans.date : existing.date;
+          const pair = await computeEntryPair({
+            quoteCurrency: foreign.currencyCode,
+            nativePrecision: foreign.precision,
+            date,
+            nativeAmount: trans.transaction_amount,
+          });
+          if (pair.status !== 'ok') {
+            throw new TransactionError(`rate-unavailable: ${date}`);
+          }
+          postedAmount = {
+            amount: pair.baseAmount,
+            transaction_amount: pair.nativeAmount,
+          };
+          foreignEdits.set(existing.id, {
+            action: 'update',
+            expected: {
+              account: matchAccount,
+              amount: match.amount,
+              transaction_amount: match.transaction_amount,
+              date: existing.date,
+            },
+            final: {
+              account: matchAccount,
+              amount: pair.baseAmount,
+              transaction_amount: pair.nativeAmount,
+              date,
+            },
+          });
+        }
+      }
+
       // Update the transaction
       const updates = {
+        ...postedAmount,
         ...(replacement?.status === 'ok' && {
           amount: replacement.write.amount,
           ...(replacement.write.transaction_amount !== undefined && {
@@ -943,10 +1045,15 @@ export async function reconcileTransactions(
     // Validate the whole request before creating payees or transactions.
     await preflightTransactionWrites(
       { added, updated },
-      { exchangeReplacements },
+      { exchangeReplacements, foreignEdits },
     );
     await createNewPayees(payeesToCreate, [...added, ...updated]);
-    await batchUpdateTransactions({ added, updated, exchangeReplacements });
+    await batchUpdateTransactions({
+      added,
+      updated,
+      exchangeReplacements,
+      foreignEdits,
+    });
   }
 
   logger.log('Debug data for the operations:', {
@@ -1061,6 +1168,7 @@ export async function matchTransactions(
     payee_name,
     trans: originalTrans,
     subtransactions,
+    pendingTransactionId,
   } of normalized) {
     // Run the rules
     const trans = await runRules(
@@ -1091,8 +1199,10 @@ export async function matchTransactions(
 
     // First, match with an existing transaction's imported_id. This
     // is the highest fidelity match and should always be attempted
-    // first.
-    if (trans.imported_id) {
+    // first. A posted row that names its pending row then matches that
+    // row exactly, so the merge gives it the posted id and amount.
+    for (const importedId of [trans.imported_id, pendingTransactionId]) {
+      if (match || !importedId) continue;
       const table = reimportDeleted
         ? 'v_transactions'
         : 'v_transactions_internal';
@@ -1101,7 +1211,7 @@ export async function matchTransactions(
       match = await db.first<db.DbTransaction>(
         `SELECT * FROM ${table} WHERE imported_id = ? AND account = ?
            ${reimportDeleted ? '' : 'ORDER BY tombstone'}`,
-        [trans.imported_id, matchAccount],
+        [importedId, matchAccount],
       );
 
       if (match) {
@@ -1200,6 +1310,9 @@ export async function matchTransactions(
       fuzzyDataset,
       matchAccount,
       matchAmount,
+      pendingMatch:
+        pendingTransactionId != null &&
+        match?.imported_id === pendingTransactionId,
     });
   }
 
@@ -1409,6 +1522,11 @@ export async function processBankSyncDownload(
   /** Set when the caller already holds the mutator and an open batch. */
   { inMutator = false }: { inMutator?: boolean } = {},
 ) {
+  // Nothing is imported or saved until Plaid holds the full history, so a
+  // later sync imports it whole and sets the starting balance once.
+  if (download.historyPending) {
+    return { added: [], updated: [] };
+  }
   // Read before any wait: the balance is decoded in this encoding.
   const decodedIn = await storedEncoding(id);
   const foreign = await foreignAccountCurrency(id);
@@ -1451,7 +1569,7 @@ export async function processBankSyncDownload(
   if (initialSync) {
     const { transactions } = download;
     let balanceToUse =
-      currentBalance === null
+      currentBalance === null && acctRow.account_sync_source === 'enableBanking'
         ? null
         : encodeStartingBalance(currentBalance, [], amountPrecision);
 
@@ -1471,7 +1589,8 @@ export async function processBankSyncDownload(
         amountPrecision,
       );
     } else if (
-      acctRow.account_sync_source === 'enableBanking' &&
+      (acctRow.account_sync_source === 'enableBanking' ||
+        acctRow.account_sync_source === 'plaid') &&
       currentBalance !== null
     ) {
       const importPending = await aqlQuery(
@@ -1529,6 +1648,7 @@ export async function processBankSyncDownload(
         updateDates,
         amountPrecision,
       });
+      await savePlaidCursor(id, download);
       return {
         ...result,
         added: initialId === null ? result.added : [initialId, ...result.added],
@@ -1559,6 +1679,7 @@ export async function processBankSyncDownload(
         decodedIn,
       );
     }
+    await savePlaidCursor(id, download);
 
     return result;
   });
@@ -1663,6 +1784,7 @@ async function processForeignBankSyncDownload(
             decodedIn,
           );
         }
+        await savePlaidCursor(id, download);
         return;
       }
 
@@ -1724,6 +1846,7 @@ async function processForeignBankSyncDownload(
         );
       }
       result = { ...reconciled, added: [initialId, ...reconciled.added] };
+      await savePlaidCursor(id, download);
     }),
   );
   return { ...result, currencyMismatches };
@@ -1882,10 +2005,15 @@ export async function downloadBankSyncAccount(
     fileId?: string;
   },
 ) {
-  const syncStartDate =
-    customStartingDate ?? (await getAccountSyncStartDate(id));
   const oldestTransaction = await getAccountOldestTransaction(id);
   const newAccount = oldestTransaction == null;
+  const syncStartDate =
+    customStartingDate ??
+    (syncSource === 'plaid'
+      ? // Plaid keeps up to two years of history, so it is not held to the
+        // 90 days other providers can fetch.
+        (oldestTransaction?.date ?? plaidDefaultStartDate())
+      : await getAccountSyncStartDate(id));
 
   let download;
   if (syncSource === 'simpleFin') {
@@ -1903,7 +2031,13 @@ export async function downloadBankSyncAccount(
   } else if (syncSource === 'akahu') {
     download = await downloadAkahuTransactions(acctId, syncStartDate);
   } else if (syncSource === 'plaid') {
-    download = await downloadPlaidBalance(acctId, bankId);
+    download = await downloadPlaidTransactions(
+      id,
+      acctId,
+      bankId,
+      newAccount,
+      syncStartDate,
+    );
   } else if (syncSource === 'goCardless') {
     download = await downloadGoCardlessTransactions(
       userId,

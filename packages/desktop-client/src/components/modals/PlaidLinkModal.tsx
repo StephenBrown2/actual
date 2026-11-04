@@ -38,8 +38,9 @@ const POLL_INTERVAL_MS = 3000;
 const LINK_LIFETIME_MS = 30 * 60 * 1000;
 
 export function PlaidLinkModal({
-  trialPlan,
+  trialPlan = false,
   upgradingAccountId,
+  update,
 }: PlaidLinkModalProps) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
@@ -63,6 +64,7 @@ export function PlaidLinkModal({
   }, []);
 
   useEffect(() => {
+    if (update) return;
     void sendCatch('plaid-items').then(({ data, error }) => {
       if (error) {
         setError(plaidErrorMessage(error));
@@ -72,7 +74,7 @@ export function PlaidLinkModal({
       setItems(data.items);
       setItemId(data.items[0]?.itemId ?? '');
     });
-  }, []);
+  }, [update]);
 
   // Plaid's page runs in another window, so wait for it to report the result.
   useEffect(() => {
@@ -83,6 +85,8 @@ export function PlaidLinkModal({
 
     async function finish(publicToken?: string) {
       dispatch(closeModal());
+      // Update mode keeps the Item's access token, so it adds no Item.
+      if (update) return;
       if (!publicToken) {
         notifyPlaidError(dispatch, t('Plaid did not return a connection.'));
         return;
@@ -127,10 +131,10 @@ export function PlaidLinkModal({
     return () => {
       stopped = true;
     };
-  }, [link, upgradingAccountId, dispatch, t]);
+  }, [link, update, upgradingAccountId, dispatch, t]);
 
   const hasItems = items !== null && items.length > 0;
-  const selectedMode = items?.length === 0 ? 'new' : mode;
+  const selectedMode = update || items?.length === 0 ? 'new' : mode;
 
   async function onContinue() {
     setIsLoading(true);
@@ -145,7 +149,10 @@ export function PlaidLinkModal({
       return;
     }
 
-    const { data, error } = await sendCatch('plaid-link-token', {});
+    const { data, error } = await sendCatch(
+      'plaid-link-token',
+      update ? { itemId: update.itemId } : {},
+    );
     if (isClosed.current) return;
     setIsLoading(false);
     if (error) {
@@ -181,6 +188,13 @@ export function PlaidLinkModal({
                   <Trans>Open Plaid again</Trans>
                 </Button>
               </>
+            ) : update ? (
+              <Paragraph style={{ marginBottom: 0 }}>
+                <Trans>
+                  Plaid opens in a new window so you can log in to your bank
+                  again.
+                </Trans>
+              </Paragraph>
             ) : (
               <>
                 <label style={{ display: 'flex', gap: 8 }}>
@@ -239,7 +253,7 @@ export function PlaidLinkModal({
               <ButtonWithLoading
                 variant="primary"
                 isLoading={isLoading}
-                isDisabled={items === null}
+                isDisabled={!update && items === null}
                 onPress={() => void onContinue()}
               >
                 <Trans>Continue</Trans>

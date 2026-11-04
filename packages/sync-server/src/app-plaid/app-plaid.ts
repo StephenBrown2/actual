@@ -25,8 +25,12 @@ import type {
   PlaidItem,
 } from './plaid-service';
 
+// Errors fixed by logging in again through update-mode Link.
+const REPAIR_CODES = ['ITEM_LOGIN_REQUIRED', 'PENDING_EXPIRATION'];
+
 // Plaid's own message rides along with its code, so dialogs can explain a
-// failure. `error_type` keeps the code, which bank sync reads as the category.
+// failure. `error_type` keeps the code, which bank sync reads as the category;
+// errors a new login fixes become the bank-sync repair error.
 function handlePlaidError(
   func: (req: Request, res: Response) => Promise<unknown>,
 ) {
@@ -36,11 +40,12 @@ function handlePlaidError(
     } catch (error) {
       if (!(error instanceof PlaidError)) throw error;
       console.log('Error', req.method, req.baseUrl + req.path, error.code);
+      const repair = REPAIR_CODES.includes(error.code);
       res.send({
         status: 'ok',
         data: {
-          error_code: 'INTERNAL_ERROR',
-          error_type: error.code,
+          error_code: repair ? 'ITEM_LOGIN_REQUIRED' : 'INTERNAL_ERROR',
+          error_type: repair ? 'ITEM_ERROR' : error.code,
           error_message: error.displayMessage ?? error.code,
         },
       });
@@ -317,5 +322,167 @@ app.post(
     writeItems(items);
 
     res.send({ status: 'ok', data: {} });
+  }),
+);
+
+/** The fields Actual reads from a `/transactions/sync` transaction. */
+type PlaidTransaction = {
+  transaction_id: string;
+  amount: number;
+  iso_currency_code: string | null;
+  unofficial_currency_code: string | null;
+  date: string;
+  name: string;
+  merchant_name: string | null;
+  pending: boolean;
+  pending_transaction_id: string | null;
+};
+
+type PlaidBalanceAccount = {
+  account_id: string;
+  type: string;
+  balances: {
+    current: number | null;
+    iso_currency_code: string | null;
+    unofficial_currency_code: string | null;
+  };
+};
+
+type PlaidSyncPage = {
+  added: PlaidTransaction[];
+  modified: PlaidTransaction[];
+  accounts: PlaidBalanceAccount[];
+  next_cursor: string;
+  has_more: boolean;
+  transactions_update_status: string;
+};
+
+/** Whether Plaid holds the account's history from `startDate` on. */
+function hasHistoryFrom(page: PlaidSyncPage, startDate: unknown) {
+  if (page.transactions_update_status === 'HISTORICAL_UPDATE_COMPLETE') {
+    return true;
+  }
+  const lastThirtyDays = new Date(Date.now() - 30 * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  return (
+    page.transactions_update_status === 'INITIAL_UPDATE_COMPLETE' &&
+    typeof startDate === 'string' &&
+    startDate >= lastThirtyDays
+  );
+}
+
+app.post(
+  '/transactions',
+  handlePlaidError(async (req, res) => {
+    const credentials = requireCredentials(req, res);
+    if (!credentials) return;
+    const item = requireItem(req, res, credentials);
+    if (!item) return;
+
+    const { accountId, cursor: startCursor, startDate } = req.body;
+    if (
+      typeof accountId !== 'string' ||
+      (startCursor !== undefined && typeof startCursor !== 'string')
+    ) {
+      res.status(400).send({
+        status: 'error',
+        reason: 'invalid-request',
+        details: 'accountId is required and cursor must be a string',
+      });
+      return;
+    }
+
+    // Each account has its own update stream, so syncing one account never
+    // consumes another's changes. No cursor means all history Plaid has. The core
+    // keeps the cursor and saves the returned one after its import. Plaid's
+    // `removed` list is ignored, as no provider deletes transactions.
+    let cursor: string | undefined = startCursor;
+    const changes: PlaidTransaction[] = [];
+    let page: PlaidSyncPage;
+    do {
+      page = await plaidRequest<PlaidSyncPage>(
+        credentials,
+        '/transactions/sync',
+        {
+          access_token: item.accessToken,
+          ...(cursor ? { cursor } : {}),
+          options: { account_id: accountId },
+        },
+      );
+      // Plaid loads the last 30 days first, then older history. The core
+      // waits or retries until the history from its start date is in.
+      if (!startCursor && !hasHistoryFrom(page, startDate)) {
+        res.send({ status: 'ok', data: { historyPending: true } });
+        return;
+      }
+      changes.push(...page.added, ...page.modified);
+      cursor = page.next_cursor;
+    } while (page.has_more);
+    // An account with no history can be missing from the sync response.
+    const account =
+      page.accounts.find(candidate => candidate.account_id === accountId) ??
+      (
+        await plaidRequest<{ accounts: PlaidBalanceAccount[] }>(
+          credentials,
+          '/accounts/get',
+          {
+            access_token: item.accessToken,
+            options: { account_ids: [accountId] },
+          },
+        )
+      ).accounts[0];
+    const current = account?.balances.current ?? null;
+    // Plaid reports credit and loan balances as the positive amount owed.
+    const startingBalance =
+      current === null
+        ? null
+        : String(
+            account?.type === 'credit' || account?.type === 'loan'
+              ? -current
+              : current,
+          );
+    const currency =
+      account?.balances.iso_currency_code ??
+      account?.balances.unofficial_currency_code ??
+      null;
+
+    // Plaid amounts are positive when money leaves the account.
+    const all = changes
+      .map(trans => ({
+        transactionId: trans.transaction_id,
+        booked: !trans.pending,
+        date: trans.date,
+        payeeName: trans.merchant_name || trans.name,
+        transactionAmount: {
+          amount: String(-trans.amount),
+          currency: trans.iso_currency_code ?? trans.unofficial_currency_code,
+        },
+        pendingTransactionId: trans.pending_transaction_id ?? undefined,
+      }))
+      .sort((a, b) => b.date.localeCompare(a.date));
+
+    res.send({
+      status: 'ok',
+      data: {
+        balances:
+          startingBalance === null
+            ? []
+            : [
+                {
+                  balanceAmount: { amount: startingBalance, currency },
+                  balanceType: 'expected',
+                },
+              ],
+        startingBalance,
+        startingBalanceCurrency: currency,
+        nextCursor: cursor,
+        transactions: {
+          all,
+          booked: all.filter(trans => trans.booked),
+          pending: all.filter(trans => !trans.booked),
+        },
+      },
+    });
   }),
 );

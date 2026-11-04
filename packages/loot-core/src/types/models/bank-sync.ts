@@ -6,7 +6,12 @@ import type {
 
 export type BankSyncBalance = GoCardlessBalance;
 export type BankSyncAmount = GoCardlessAmount;
-export type BankSyncTransaction = GoCardlessTransaction;
+export type BankSyncTransaction = GoCardlessTransaction & {
+  /** On a posted row, the provider id of the pending row it replaces. */
+  pendingTransactionId?: string;
+  /** The row's date (YYYY-MM-DD), as providers send it beside bookingDate. */
+  date?: string;
+};
 
 export type BankSyncResponse = {
   transactions: {
@@ -19,6 +24,10 @@ export type BankSyncResponse = {
   startingBalance: string | null;
   /** Currency of startingBalance, or null when unknown or mixed. */
   startingBalanceCurrency?: string | null;
+  /** Plaid's `/transactions/sync` cursor after these rows. */
+  nextCursor?: string;
+  /** Plaid has not finished downloading the history a no-cursor sync asked for. */
+  historyPending?: boolean;
   error_type: string;
   error_code: string;
 };

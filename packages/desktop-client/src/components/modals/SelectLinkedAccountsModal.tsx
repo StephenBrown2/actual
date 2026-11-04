@@ -552,8 +552,9 @@ export function SelectLinkedAccountsModal({
       }
     }
 
-    // Foreign links write nothing until they can complete, so their results
-    // are awaited; links already made to the same destination are skipped.
+    // Foreign links write nothing until they can complete, and Plaid links
+    // wait for the bank's history, so their results are awaited; links
+    // already made to the same destination are skipped.
     const foreignLinks: Array<[string, string, Promise<LinkAccountResult>]> =
       [];
     Object.entries(chosen).forEach(
@@ -607,7 +608,7 @@ export function SelectLinkedAccountsModal({
             ],
             chosenLocalAccountId,
           ) !== null;
-        if (isForeign) {
+        if (isForeign || syncSource === 'plaid') {
           foreignLinks.push([
             chosenExternalAccountId,
             chosenLocalAccountId,
@@ -728,11 +729,7 @@ export function SelectLinkedAccountsModal({
     return localAccounts.find(acc => acc.id === chosenId);
   };
 
-  // Memoize default starting settings to avoid repeated calculations
-  const defaultStartingSettings = useMemo<CustomStartingSettings>(
-    () => getDefaultStartingSettings(),
-    [],
-  );
+  const defaultStartingSettings = getDefaultStartingSettings(syncSource);
 
   const getCustomStartingDate = (accountId: string) => {
     if (customStartingDates[accountId]) {
@@ -924,6 +921,15 @@ export function SelectLinkedAccountsModal({
                       >
                         <Trans>This account could not be linked.</Trans>
                       </Text>
+                    ) : failure.type === 'history-timeout' ? (
+                      <Text
+                        style={{ color: theme.errorText, marginBottom: 15 }}
+                      >
+                        <Trans>
+                          The bank has not sent this account&apos;s transaction
+                          history yet. Try again in a few minutes.
+                        </Trans>
+                      </Text>
                     ) : (
                       <Text
                         style={{ color: theme.warningText, marginBottom: 15 }}
@@ -939,6 +945,20 @@ export function SelectLinkedAccountsModal({
                 );
               })}
             </View>
+          )}
+
+          {isLinking && syncSource === 'plaid' && (
+            <Text
+              style={{
+                padding: isNarrowWidth ? '12px 16px 0' : '12px 0 0',
+                flexShrink: 0,
+              }}
+            >
+              <Trans>
+                Waiting for the bank&apos;s transaction history. This can take a
+                few minutes.
+              </Trans>
+            </Text>
           )}
 
           <View
@@ -1028,9 +1048,12 @@ export function reencodeStartingSettings(
  * defaulting it to 0 here would silently override the real balance for anyone
  * who only adjusts the date.
  */
-export function getDefaultStartingSettings(): CustomStartingSettings {
-  // Default to 89 days ago (90 days inclusive, matches server default)
-  return { date: subDays(currentDay(), 89) };
+export function getDefaultStartingSettings(
+  syncSource?: SelectLinkedAccountsModalProps['syncSource'],
+): CustomStartingSettings {
+  // Plaid loads the last 30 days first; other providers default to 90 days.
+  // Both match the server's defaults (inclusive of today).
+  return { date: subDays(currentDay(), syncSource === 'plaid' ? 29 : 89) };
 }
 
 /**

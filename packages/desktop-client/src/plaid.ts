@@ -1,4 +1,4 @@
-import { sendCatch } from '@actual-app/core/platform/client/connection';
+import { send, sendCatch } from '@actual-app/core/platform/client/connection';
 import type { AccountEntity, PlaidItem } from '@actual-app/core/types/models';
 import { t } from 'i18next';
 
@@ -70,4 +70,47 @@ export async function selectPlaidAccounts(
       },
     }),
   );
+}
+
+// The server starts a new connection when no Item id is given, so a missing
+// one stops here.
+async function linkedItemId(
+  dispatch: AppDispatch,
+  accountId: AccountEntity['id'],
+) {
+  const itemId = await send('plaid-account-item-id', { id: accountId });
+  if (!itemId) {
+    notifyPlaidError(dispatch, t('This account is not linked to Plaid.'));
+  }
+  return itemId;
+}
+
+/** Opens update-mode Link so the user can log in to the account's bank again. */
+export async function startPlaidRepair(
+  dispatch: AppDispatch,
+  accountId: AccountEntity['id'],
+) {
+  const itemId = await linkedItemId(dispatch, accountId);
+  if (itemId) {
+    dispatch(
+      pushModal({
+        modal: { name: 'plaid-link', options: { update: { itemId } } },
+      }),
+    );
+  }
+}
+
+/** Removes the account's Item from Plaid. Returns false on failure. */
+export async function removePlaidConnection(
+  dispatch: AppDispatch,
+  accountId: AccountEntity['id'],
+) {
+  const itemId = await linkedItemId(dispatch, accountId);
+  if (!itemId) return false;
+  const result = await sendCatch('plaid-remove-item', { itemId });
+  if (result.error) {
+    notifyPlaidError(dispatch, plaidErrorMessage(result.error));
+    return false;
+  }
+  return true;
 }

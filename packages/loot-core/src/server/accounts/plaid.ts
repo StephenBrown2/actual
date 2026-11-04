@@ -1,10 +1,14 @@
 import * as asyncStorage from '#platform/server/asyncStorage';
+import * as db from '#server/db';
 import { APIError, PostError } from '#server/errors';
 import { post } from '#server/post';
 import { getPrefs } from '#server/prefs';
 import { getServer } from '#server/server-config';
 import { isReviewedCurrency } from '#shared/amount-encoding';
+import * as monthUtils from '#shared/months';
 import type {
+  AccountEntity,
+  BankSyncResponse,
   PlaidAccount,
   PlaidItem,
   SyncServerPlaidAccount,
@@ -94,20 +98,46 @@ export async function getPlaidAccounts(
   }));
 }
 
-// ponytail: balance only, so a link records the current balance as the
-// opening balance. Transaction download replaces this with /transactions.
-export async function downloadPlaidBalance(acctId: string, itemId: string) {
-  const account = (await fetchPlaidAccounts(itemId)).find(
-    candidate => candidate.account_id === acctId,
-  );
-  if (!account) {
-    throw new PostError('account-not-found');
+const HISTORY_POLL_MS = 5_000;
+const HISTORY_WAIT_MS = 10 * 60_000;
+
+// ponytail: the finished poll downloads the history once more than needed;
+// hand that download to the link's sync if Plaid rate limits ever bite.
+/**
+ * Plaid loads an account's last 30 days before its older history, so a new
+ * account starts there unless the user picks an earlier date.
+ */
+export function plaidDefaultStartDate() {
+  return monthUtils.subDays(monthUtils.currentDay(), 29);
+}
+
+/**
+ * Polls until Plaid holds the account's history from `startDate`, so a link
+ * imports all of it. Returns false when the wait runs out. An error ends the
+ * wait, and the link's own sync then reports it.
+ */
+export async function waitForPlaidHistory(
+  accountId: string,
+  itemId: string,
+  startDate: string,
+) {
+  for (let waited = 0; ; waited += HISTORY_POLL_MS) {
+    const res = await plaidPost<Pick<BankSyncResponse, 'historyPending'>>(
+      '/transactions',
+      { itemId, accountId, startDate },
+    );
+    if (!res.historyPending) return true;
+    if (waited >= HISTORY_WAIT_MS) return false;
+    await new Promise(resolve => setTimeout(resolve, HISTORY_POLL_MS));
   }
-  const balance = plaidBalance(account);
-  return {
-    transactions: [],
-    // A missing balance is left to the shared balance-unavailable handling.
-    startingBalance: balance === null ? null : String(balance),
-    startingBalanceCurrency: plaidAccountCurrency(account.balances),
-  };
+}
+
+/** The Plaid Item an Actual account syncs from, or null when unlinked. */
+export async function plaidAccountItemId({ id }: { id: AccountEntity['id'] }) {
+  const row = await db.first<Pick<db.DbBank, 'bank_id'>>(
+    `SELECT b.bank_id FROM accounts a JOIN banks b ON a.bank = b.id
+     WHERE a.id = ? AND a.account_sync_source = 'plaid'`,
+    [id],
+  );
+  return row?.bank_id ?? null;
 }

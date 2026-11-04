@@ -66,7 +66,14 @@ import {
 import { getCurrentEstimates } from './current-estimates';
 import * as link from './link';
 import { getStartingBalancePayee } from './payees';
-import { getPlaidAccounts, plaidLinkPost, plaidPost } from './plaid';
+import {
+  getPlaidAccounts,
+  plaidAccountItemId,
+  plaidDefaultStartDate,
+  plaidLinkPost,
+  plaidPost,
+  waitForPlaidHistory,
+} from './plaid';
 import * as bankSync from './sync';
 
 // Shared base type for link account parameters
@@ -122,6 +129,7 @@ export type AccountHandlers = {
   'plaid-items': typeof plaidItems;
   'plaid-accounts': typeof getPlaidAccounts;
   'plaid-remove-item': typeof plaidRemoveItem;
+  'plaid-account-item-id': typeof plaidAccountItemId;
   'akahu-accounts': typeof akahuAccounts;
   'gocardless-get-banks': typeof getGoCardlessBanks;
   'gocardless-create-web-token': typeof createGoCardlessWebToken;
@@ -229,7 +237,8 @@ export type LinkAccountResult =
       currencyMismatches: number;
     }
   | { type: 'rate-unavailable'; currency: string; dates: string[] }
-  | { type: 'balance-unavailable' };
+  | { type: 'balance-unavailable' }
+  | { type: 'history-timeout' };
 
 type ProviderAccount = {
   account_id: string;
@@ -316,6 +325,19 @@ async function linkBankAccount({
   tables?: string[];
 }): Promise<LinkAccountResult> {
   const currency = await linkDestinationCurrency(account.currency, upgradingId);
+  // A Plaid link writes nothing until the bank's history from the starting
+  // date is ready, so the starting balance accounts for every row it imports.
+  if (
+    syncSource === 'plaid' &&
+    bankId &&
+    !(await waitForPlaidHistory(
+      account.account_id,
+      bankId,
+      startingDate ?? plaidDefaultStartDate(),
+    ))
+  ) {
+    return { type: 'history-timeout' };
+  }
   const id = upgradingId ?? uuidv4();
 
   const writeLink = async () => {
@@ -1888,6 +1910,10 @@ async function unlinkAccount({ id }: { id: AccountEntity['id'] }) {
     account_sync_source: null,
     bank_sync_status: null,
   });
+  // A relink, possibly to another Item, starts again from full history.
+  if (accRow.account_sync_source === 'plaid') {
+    await db.update('preferences', { id: `plaid-cursor-${id}`, value: null });
+  }
 
   if (isGoCardless === false) {
     return;
@@ -1986,6 +2012,7 @@ app.method('plaid-exchange', plaidExchange);
 app.method('plaid-items', plaidItems);
 app.method('plaid-accounts', getPlaidAccounts);
 app.method('plaid-remove-item', plaidRemoveItem);
+app.method('plaid-account-item-id', plaidAccountItemId);
 app.method('akahu-accounts', akahuAccounts);
 app.method('gocardless-get-banks', getGoCardlessBanks);
 app.method('gocardless-create-web-token', createGoCardlessWebToken);
