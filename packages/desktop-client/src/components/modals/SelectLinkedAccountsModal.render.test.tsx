@@ -266,6 +266,7 @@ it('waits for a Plaid link and reports a history timeout', async () => {
             currency: 'USD',
             institution: 'Bank',
             itemId: 'item-1',
+            balanceOnly: false,
           },
         ]}
         upgradingAccountId="usd"

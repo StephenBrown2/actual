@@ -330,6 +330,7 @@ async function linkBankAccount({
   fileId,
   tables = ['transactions', 'accounts'],
   operationRates: suppliedRates,
+  balanceOnly = false,
 }: LinkAccountBaseParams & {
   syncSource: NonNullable<AccountEntity['account_sync_source']>;
   institution: { name: string | null } | string;
@@ -337,6 +338,8 @@ async function linkBankAccount({
   account: ProviderAccount;
   fileId?: string;
   tables?: string[];
+  /** Turns off transaction import, as the Investment Account option does. */
+  balanceOnly?: boolean;
 }): Promise<LinkAccountResult> {
   const currency = await linkDestinationCurrency(account.currency, upgradingId);
   const operationRates = await requestRates(suppliedRates);
@@ -344,6 +347,7 @@ async function linkBankAccount({
   // date is ready, so the starting balance accounts for every row it imports.
   if (
     syncSource === 'plaid' &&
+    !balanceOnly &&
     bankId &&
     !(await waitForPlaidHistory(
       account.account_id,
@@ -357,6 +361,12 @@ async function linkBankAccount({
 
   const writeLink = async () => {
     const bank = await link.findOrCreateBank(institution, bankId);
+    if (balanceOnly) {
+      await db.update('preferences', {
+        id: `sync-import-transactions-${id}`,
+        value: 'false',
+      });
+    }
     if (upgradingId) {
       await db.update('accounts', {
         id,
@@ -413,6 +423,7 @@ async function linkBankAccount({
         bankId,
         customStartingDate: startingDate,
         fileId,
+        balanceOnly,
       },
     );
     try {
@@ -536,6 +547,7 @@ async function linkPlaidAccount({
     bankId: externalAccount.itemId,
     account: externalAccount,
     fileId: getPrefs()?.cloudFileId,
+    balanceOnly: externalAccount.balanceOnly,
   });
 }
 

@@ -1,6 +1,6 @@
 import * as asyncStorage from '#platform/server/asyncStorage';
 import * as db from '#server/db';
-import { APIError, PostError } from '#server/errors';
+import { APIError, BankSyncError, PostError } from '#server/errors';
 import { post } from '#server/post';
 import { getPrefs } from '#server/prefs';
 import { getServer } from '#server/server-config';
@@ -95,7 +95,35 @@ export async function getPlaidAccounts(
     currency: plaidAccountCurrency(account.balances),
     institution: item.institutionName ?? undefined,
     itemId: item.itemId,
+    balanceOnly: account.type === 'investment',
   }));
+}
+
+/** A balance-only account's current balance, with no transactions. */
+export async function downloadPlaidBalance(acctId: string, itemId: string) {
+  const res = await plaidPost<
+    { accounts: PlaidAccount[] } & Partial<BankSyncResponse>
+  >('/accounts', { itemId });
+  // A bank-sync error, unlike the dialogs' message, lets sync offer repair.
+  if (res.error_code) {
+    throw new BankSyncError(
+      res.error_code,
+      res.error_type ?? '',
+      res.error_code,
+    );
+  }
+  const account = res.accounts.find(
+    candidate => candidate.account_id === acctId,
+  );
+  if (!account) {
+    throw new PostError('account-not-found');
+  }
+  const balance = plaidBalance(account);
+  return {
+    transactions: [],
+    startingBalance: balance === null ? null : String(balance),
+    startingBalanceCurrency: plaidAccountCurrency(account.balances),
+  };
 }
 
 const HISTORY_POLL_MS = 5_000;

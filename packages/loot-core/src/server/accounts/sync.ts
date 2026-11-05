@@ -52,7 +52,11 @@ import type {
 
 import { findScheduledExchange } from './exchange-import';
 import { getStartingBalancePayee } from './payees';
-import { plaidDefaultStartDate, plaidPost } from './plaid';
+import {
+  downloadPlaidBalance,
+  plaidDefaultStartDate,
+  plaidPost,
+} from './plaid';
 import { title } from './title';
 
 function BankSyncError(type: string, code: string, details?: object) {
@@ -376,7 +380,14 @@ async function downloadPlaidTransactions(
   itemId: string,
   newAccount: boolean,
   syncStartDate: string,
+  balanceOnly: boolean,
 ) {
+  if (
+    balanceOnly ||
+    !(await readSyncPreference(id, 'sync-import-transactions', 'true'))
+  ) {
+    return downloadPlaidBalance(acctId, itemId);
+  }
   const cursor = newAccount
     ? undefined
     : (
@@ -2010,6 +2021,7 @@ export async function downloadBankSyncAccount(
     bankId,
     customStartingDate,
     fileId,
+    balanceOnly = false,
   }: {
     userId: string | undefined;
     userKey: string | undefined;
@@ -2018,6 +2030,8 @@ export async function downloadBankSyncAccount(
     bankId: string | undefined;
     customStartingDate?: string;
     fileId?: string;
+    /** A link that writes the balance-only preference with its import. */
+    balanceOnly?: boolean;
   },
 ) {
   const oldestTransaction = await getAccountOldestTransaction(id);
@@ -2052,6 +2066,7 @@ export async function downloadBankSyncAccount(
       bankId,
       newAccount,
       syncStartDate,
+      balanceOnly,
     );
   } else if (syncSource === 'goCardless') {
     download = await downloadGoCardlessTransactions(
