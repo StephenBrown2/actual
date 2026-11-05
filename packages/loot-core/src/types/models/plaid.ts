@@ -37,4 +37,6 @@ export type SyncServerPlaidAccount = {
   currency: string | null;
   institution?: string;
   itemId: string;
+  /** Investment accounts import only their balance, for reconciliation. */
+  balanceOnly: boolean;
 };

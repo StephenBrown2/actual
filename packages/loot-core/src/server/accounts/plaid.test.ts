@@ -108,6 +108,30 @@ describe('plaid-accounts-link', () => {
           },
         },
         {
+          account_id: 'brokerage',
+          name: 'Brokerage',
+          official_name: null,
+          mask: '4444',
+          type: 'investment',
+          balances: {
+            current: 2000,
+            iso_currency_code: 'USD',
+            unofficial_currency_code: null,
+          },
+        },
+        {
+          account_id: 'eur-brokerage',
+          name: 'EUR Brokerage',
+          official_name: null,
+          mask: '5555',
+          type: 'investment',
+          balances: {
+            current: 300,
+            iso_currency_code: 'EUR',
+            unofficial_currency_code: null,
+          },
+        },
+        {
           account_id: 'no-balance',
           name: 'Savings',
           official_name: null,
@@ -211,6 +235,146 @@ describe('plaid-accounts-link', () => {
          WHERE a.account_id = 'card' AND t.starting_balance_flag = 1`,
       ),
     ).toEqual({ amount: -50000 });
+  });
+
+  it('links an investment account to import only its balance', async () => {
+    const accounts = await app.handlers['plaid-accounts'](item);
+    const brokerage = accounts.find(
+      account => account.account_id === 'brokerage',
+    );
+    if (!brokerage) throw new Error('brokerage not listed');
+    expect(brokerage.balanceOnly).toBe(true);
+    const transactions = vi.fn();
+    mockServer['/plaid/transactions'] = transactions;
+
+    await app.handlers['plaid-accounts-link']({ externalAccount: brokerage });
+
+    const row = db.firstSync<{ id: string }>(
+      `SELECT id FROM accounts WHERE account_id = 'brokerage'`,
+    );
+    if (!row) throw new Error('brokerage not linked');
+    const { id } = row;
+    expect(
+      db.firstSync(`SELECT value FROM preferences WHERE id = ?`, [
+        `sync-import-transactions-${id}`,
+      ]),
+    ).toEqual({ value: 'false' });
+    expect(
+      db.firstSync(
+        `SELECT amount FROM transactions
+         WHERE acct = ? AND starting_balance_flag = 1`,
+        [id],
+      ),
+    ).toEqual({ amount: 200000 });
+    expect(transactions).not.toHaveBeenCalled();
+  });
+
+  it('asks for repair when a balance-only sync needs a new login', async () => {
+    const accounts = await app.handlers['plaid-accounts'](item);
+    const brokerage = accounts.find(
+      account => account.account_id === 'brokerage',
+    );
+    if (!brokerage) throw new Error('brokerage not listed');
+    await app.handlers['plaid-accounts-link']({ externalAccount: brokerage });
+    const row = db.firstSync<{ id: string }>(
+      `SELECT id FROM accounts WHERE account_id = 'brokerage'`,
+    );
+    if (!row) throw new Error('brokerage not linked');
+    mockServer['/plaid/accounts'] = () => ({
+      error_type: 'ITEM_ERROR',
+      error_code: 'ITEM_LOGIN_REQUIRED',
+    });
+
+    vi.mocked(asyncStorage.multiGet).mockResolvedValue({
+      'user-id': 'user',
+      'user-key': 'key',
+    });
+
+    const { errors } = await app.handlers['accounts-bank-sync']({
+      ids: [row.id],
+    });
+
+    expect(errors).toEqual([
+      expect.objectContaining({
+        category: 'ITEM_ERROR',
+        code: 'ITEM_LOGIN_REQUIRED',
+      }),
+    ]);
+  });
+
+  it('downloads only the balance when linking a foreign investment account', async () => {
+    await exchangeRatesApp.handlers['exchange-rates/save']({
+      quoteCurrency: 'EUR',
+      rate: '0.5',
+      kind: 'standing',
+      date: '2026-01-01',
+    });
+    const accounts = await app.handlers['plaid-accounts'](item);
+    const brokerage = accounts.find(
+      account => account.account_id === 'eur-brokerage',
+    );
+    if (!brokerage) throw new Error('brokerage not listed');
+    const transactions = vi.fn();
+    mockServer['/plaid/transactions'] = transactions;
+
+    await expect(
+      app.handlers['plaid-accounts-link']({ externalAccount: brokerage }),
+    ).resolves.toMatchObject({ type: 'ok' });
+
+    expect(transactions).not.toHaveBeenCalled();
+    expect(
+      db.firstSync(
+        `SELECT t.transaction_amount FROM transactions t
+         JOIN accounts a ON t.acct = a.id
+         WHERE a.account_id = 'eur-brokerage' AND t.starting_balance_flag = 1`,
+      ),
+    ).toEqual({ transaction_amount: 30000 });
+  });
+
+  it('imports only rows from the sync start date once transactions are turned on', async () => {
+    const accounts = await app.handlers['plaid-accounts'](item);
+    const brokerage = accounts.find(
+      account => account.account_id === 'brokerage',
+    );
+    if (!brokerage) throw new Error('brokerage not listed');
+    await app.handlers['plaid-accounts-link']({ externalAccount: brokerage });
+    const row = db.firstSync<{ id: string }>(
+      `SELECT id FROM accounts WHERE account_id = 'brokerage'`,
+    );
+    if (!row) throw new Error('brokerage not linked');
+    await db.update('preferences', {
+      id: `sync-import-transactions-${row.id}`,
+      value: 'true',
+    });
+    const trans = (id: string, date: string) => ({
+      transactionId: id,
+      booked: true,
+      date,
+      payeeName: 'Dividend',
+      transactionAmount: { amount: '5', currency: 'USD' },
+    });
+    mockServer['/plaid/transactions'] = () => ({
+      transactions: {
+        all: [trans('new', '2026-03-12'), trans('old', '2026-02-01')],
+        booked: [],
+        pending: [],
+      },
+      balances: [],
+      startingBalance: '2005',
+      startingBalanceCurrency: 'USD',
+      nextCursor: 'cursor-1',
+    });
+
+    await syncAccount(undefined, undefined, row.id, 'brokerage', 'item-1');
+
+    expect(
+      db.runQuery(
+        `SELECT imported_id FROM v_transactions
+         WHERE account = ? AND starting_balance_flag = 0`,
+        [row.id],
+        true,
+      ),
+    ).toEqual([{ imported_id: 'new' }]);
   });
 
   it('fails the link instead of opening a missing balance at zero', async () => {
@@ -332,6 +496,7 @@ describe('Plaid transaction sync', () => {
         currency,
         institution: 'Bank',
         itemId: 'item-1',
+        balanceOnly: false,
       },
     });
     const account = db.firstSync<Pick<db.DbAccount, 'id'>>(
@@ -462,6 +627,7 @@ describe('Plaid transaction sync', () => {
         currency: 'USD',
         institution: 'Bank',
         itemId: 'item-1',
+        balanceOnly: false,
       },
     });
     await vi.advanceTimersByTimeAsync(10 * 60_000);
