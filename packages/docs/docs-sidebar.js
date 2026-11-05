@@ -147,6 +147,7 @@ const sidebars = {
                     'advanced/bank-sync/enable-banking',
                     'advanced/bank-sync/gocardless',
                     'advanced/bank-sync/simplefin',
+                    'advanced/bank-sync/plaid',
                     'advanced/bank-sync/pluggyai',
                   ],
                 },
