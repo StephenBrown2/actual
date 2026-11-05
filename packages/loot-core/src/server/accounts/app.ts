@@ -50,6 +50,7 @@ import type {
   GoCardlessToken,
   ImportTransactionEntity,
   PlaidItem,
+  PlaidQuantitySecurity,
   PlaidStatus,
   SyncServerAkahuAccount,
   SyncServerEnableBankingAccount,
@@ -307,7 +308,12 @@ function linkFailure(
 ): Exclude<LinkAccountResult, { type: 'ok' }> | null {
   const dates = bankSync.rateUnavailableDates(err);
   if (dates) {
-    return { type: 'rate-unavailable', currency, dates };
+    return {
+      type: 'rate-unavailable',
+      currency:
+        (err instanceof TransactionError && err.rateCurrency) || currency,
+      dates,
+    };
   }
   if (
     err instanceof TransactionError &&
@@ -331,6 +337,7 @@ async function linkBankAccount({
   tables = ['transactions', 'accounts'],
   operationRates: suppliedRates,
   balanceOnly = false,
+  plaidQuantity,
 }: LinkAccountBaseParams & {
   syncSource: NonNullable<AccountEntity['account_sync_source']>;
   institution: { name: string | null } | string;
@@ -340,6 +347,8 @@ async function linkBankAccount({
   tables?: string[];
   /** Turns off transaction import, as the Investment Account option does. */
   balanceOnly?: boolean;
+  /** Syncs the quantity of this security instead of transactions. */
+  plaidQuantity?: PlaidQuantitySecurity;
 }): Promise<LinkAccountResult> {
   const currency = await linkDestinationCurrency(account.currency, upgradingId);
   const operationRates = await requestRates(suppliedRates);
@@ -348,6 +357,7 @@ async function linkBankAccount({
   if (
     syncSource === 'plaid' &&
     !balanceOnly &&
+    !plaidQuantity &&
     bankId &&
     !(await waitForPlaidHistory(
       account.account_id,
@@ -365,6 +375,17 @@ async function linkBankAccount({
       await db.update('preferences', {
         id: `sync-import-transactions-${id}`,
         value: 'false',
+      });
+    }
+    if (plaidQuantity) {
+      await db.update('preferences', {
+        id: `plaid-quantity-${id}`,
+        value: plaidQuantity.securityId,
+      });
+      // A relink of a balance-only account imports its quantity rows.
+      await db.update('preferences', {
+        id: `sync-import-transactions-${id}`,
+        value: 'true',
       });
     }
     if (upgradingId) {
@@ -424,6 +445,7 @@ async function linkBankAccount({
         customStartingDate: startingDate,
         fileId,
         balanceOnly,
+        plaidQuantity,
       },
     );
     try {
@@ -547,7 +569,15 @@ async function linkPlaidAccount({
     bankId: externalAccount.itemId,
     account: externalAccount,
     fileId: getPrefs()?.cloudFileId,
-    balanceOnly: externalAccount.balanceOnly,
+    // An accepted quantity offer arrives in the offer's currency.
+    ...(externalAccount.syncQuantity && externalAccount.quantityOffer
+      ? {
+          plaidQuantity: {
+            securityId: externalAccount.quantityOffer.securityId,
+            currency: externalAccount.quantityOffer.currency,
+          },
+        }
+      : { balanceOnly: externalAccount.balanceOnly }),
   });
 }
 
@@ -1058,7 +1088,11 @@ async function plaidStatus() {
 }
 
 /** Omit `itemId` for a new connection; pass it to repair or extend one. */
-async function plaidLinkToken(args: { itemId?: string }) {
+async function plaidLinkToken(args: {
+  itemId?: string;
+  /** Update mode on the Item asks consent for Investments. */
+  addInvestments?: boolean;
+}) {
   return plaidLinkPost<{ linkToken: string; hostedLinkUrl: string }>(
     '/link-token',
     args,
@@ -1528,7 +1562,8 @@ function handleSyncError(
       type: 'rate-unavailable',
       accountId: acct.id,
       message: `Failed syncing account "${acct.name}": an exchange rate is needed for ${dates.join(', ')}.`,
-      currency: acct.currency,
+      currency:
+        (err instanceof TransactionError && err.rateCurrency) || acct.currency,
       dates,
     };
   }
@@ -1962,6 +1997,7 @@ async function unlinkAccount({ id }: { id: AccountEntity['id'] }) {
   // A relink, possibly to another Item, starts again from full history.
   if (accRow.account_sync_source === 'plaid') {
     await db.update('preferences', { id: `plaid-cursor-${id}`, value: null });
+    await db.update('preferences', { id: `plaid-quantity-${id}`, value: null });
   }
 
   if (isGoCardless === false) {

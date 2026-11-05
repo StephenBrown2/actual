@@ -207,6 +207,19 @@ describe('Plaid link tokens', () => {
     expect(calls[0].body.products).toBeUndefined();
   });
 
+  it('asks consent for Investments in update mode', async () => {
+    setCredentials('global-client');
+    writeItems({ 'item-1': storedItem() });
+    mockPlaid({ '/link/token/create': () => ({ link_token: 'link-2' }) });
+
+    await post('/link-token', { itemId: 'item-1', addInvestments: true });
+
+    expect(calls[0].body).toMatchObject({
+      access_token: 'access-sandbox-1',
+      additional_consented_products: ['investments'],
+    });
+  });
+
   it('refuses update mode for an Item owned by someone else', async () => {
     setCredentials('global-client');
     writeItems({ 'item-1': storedItem() });
@@ -664,4 +677,86 @@ describe('Plaid transactions', () => {
       });
     },
   );
+});
+
+describe('Plaid investments', () => {
+  beforeEach(() => {
+    setCredentials('global-client');
+    writeItems({ 'item-1': storedItem() });
+  });
+
+  it("returns an account's holdings and records the Investments product", async () => {
+    const holdings = [{ account_id: 'acc-1', security_id: 'sec-1' }];
+    const securities = [{ security_id: 'sec-1', ticker_symbol: 'EUR' }];
+    mockPlaid({
+      '/investments/holdings/get': () => ({
+        holdings,
+        securities,
+        accounts: [],
+      }),
+    });
+
+    const res = await post('/investments/holdings', {
+      itemId: 'item-1',
+      accountId: 'acc-1',
+    });
+
+    expect(calls[0].body).toMatchObject({
+      access_token: 'access-sandbox-1',
+      options: { account_ids: ['acc-1'] },
+    });
+    expect(res.body.data).toEqual({ holdings, securities });
+    expect(readItems()['item-1'].products).toEqual([
+      'transactions',
+      'investments',
+    ]);
+  });
+
+  it('pages investment transactions by offset', async () => {
+    const rows = Array.from({ length: 3 }, (_, index) => ({
+      investment_transaction_id: `inv-${index}`,
+    }));
+    mockPlaid({
+      '/investments/transactions/get': body => {
+        const { offset } = body.options as { offset: number };
+        return {
+          investment_transactions: rows.slice(offset, offset + 2),
+          total_investment_transactions: rows.length,
+        };
+      },
+    });
+
+    const res = await post('/investments/transactions', {
+      itemId: 'item-1',
+      accountId: 'acc-1',
+      startDate: '2026-01-01',
+      endDate: '2026-03-01',
+    });
+
+    expect(calls.map(call => call.body.options)).toEqual([
+      { account_ids: ['acc-1'], count: 500, offset: 0 },
+      { account_ids: ['acc-1'], count: 500, offset: 2 },
+    ]);
+    expect(calls[0].body).toMatchObject({
+      start_date: '2026-01-01',
+      end_date: '2026-03-01',
+    });
+    expect(res.body.data).toEqual({ transactions: rows });
+  });
+
+  it('asks for a new login without recording Investments', async () => {
+    mockPlaid({
+      '/investments/holdings/get': () => ({
+        error_code: 'ITEM_LOGIN_REQUIRED',
+      }),
+    });
+
+    const res = await post('/investments/holdings', {
+      itemId: 'item-1',
+      accountId: 'acc-1',
+    });
+
+    expect(res.body.data).toMatchObject({ error_type: 'ITEM_ERROR' });
+    expect(readItems()['item-1'].products).toEqual(['transactions']);
+  });
 });

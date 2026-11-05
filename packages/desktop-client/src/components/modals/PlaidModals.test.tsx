@@ -183,7 +183,10 @@ describe('PlaidLinkModal with Hosted Link', () => {
     expect(
       await screen.findByText('Plaid was closed before linking finished.'),
     ).toBeVisible();
-    expect(linkToken).toHaveBeenCalledWith({ itemId: 'item-1' });
+    expect(linkToken).toHaveBeenCalledWith({
+      itemId: 'item-1',
+      addInvestments: false,
+    });
   });
 });
 

@@ -156,13 +156,20 @@ app.post(
     if (itemId === undefined) {
       link = await createLinkToken(credentials, base);
     } else {
-      // Update mode repairs or extends an existing Item and takes no products.
+      // Update mode repairs an existing Item, or asks consent for Investments,
+      // which its next holdings request then adds.
       const item = requireItem(req, res, credentials);
       if (!item) return;
       link = await plaidRequest<LinkTokenResponse>(
         credentials,
         '/link/token/create',
-        { ...base, access_token: item.accessToken },
+        {
+          ...base,
+          access_token: item.accessToken,
+          ...(req.body.addInvestments === true
+            ? { additional_consented_products: ['investments'] }
+            : {}),
+        },
       );
     }
 
@@ -484,5 +491,89 @@ app.post(
         },
       },
     });
+  }),
+);
+
+app.post(
+  '/investments/holdings',
+  handlePlaidError(async (req, res) => {
+    const credentials = requireCredentials(req, res);
+    if (!credentials) return;
+    const item = requireItem(req, res, credentials);
+    if (!item) return;
+
+    const { accountId } = req.body;
+    const data = await plaidRequest<{
+      holdings: unknown[];
+      securities: unknown[];
+    }>(credentials, '/investments/holdings/get', {
+      access_token: item.accessToken,
+      ...(typeof accountId === 'string'
+        ? { options: { account_ids: [accountId] } }
+        : {}),
+    });
+    // A successful request adds Investments to an Item that lacked it.
+    if (!item.products.includes('investments')) {
+      writeItems({
+        ...readItems(),
+        [req.body.itemId]: {
+          ...item,
+          products: [...item.products, 'investments'],
+        },
+      });
+    }
+
+    res.send({
+      status: 'ok',
+      data: { holdings: data.holdings, securities: data.securities },
+    });
+  }),
+);
+
+app.post(
+  '/investments/transactions',
+  handlePlaidError(async (req, res) => {
+    const credentials = requireCredentials(req, res);
+    if (!credentials) return;
+    const item = requireItem(req, res, credentials);
+    if (!item) return;
+
+    const { accountId, startDate, endDate } = req.body;
+    if (
+      typeof accountId !== 'string' ||
+      typeof startDate !== 'string' ||
+      typeof endDate !== 'string'
+    ) {
+      res.status(400).send({
+        status: 'error',
+        reason: 'invalid-request',
+        details: 'accountId, startDate and endDate are required',
+      });
+      return;
+    }
+
+    const transactions: unknown[] = [];
+    let page: {
+      investment_transactions: unknown[];
+      total_investment_transactions: number;
+    };
+    do {
+      page = await plaidRequest(credentials, '/investments/transactions/get', {
+        access_token: item.accessToken,
+        start_date: startDate,
+        end_date: endDate,
+        options: {
+          account_ids: [accountId],
+          count: 500,
+          offset: transactions.length,
+        },
+      });
+      transactions.push(...page.investment_transactions);
+    } while (
+      page.investment_transactions.length > 0 &&
+      transactions.length < page.total_investment_transactions
+    );
+
+    res.send({ status: 'ok', data: { transactions } });
   }),
 );
