@@ -43,6 +43,8 @@ import { Autocomplete } from '#components/autocomplete/Autocomplete';
 import type { AutocompleteItem } from '#components/autocomplete/Autocomplete';
 import { Modal, ModalCloseButton, ModalHeader } from '#components/common/Modal';
 import { FinancialText } from '#components/FinancialText';
+import { Checkbox } from '#components/forms';
+import { LabeledCheckbox } from '#components/forms/LabeledCheckbox';
 import { MissingRateForm } from '#components/modals/ImportTransactionsModal/MissingRateForm';
 import { PrivacyFilter } from '#components/PrivacyFilter';
 import { Cell, Field, Row, Table, TableHeader } from '#components/table';
@@ -57,7 +59,7 @@ import { useDateFormat } from '#hooks/useDateFormat';
 import { useFormat } from '#hooks/useFormat';
 import { useMulticurrencyAvailable } from '#hooks/useMulticurrencyAvailable';
 import { useSyncedPref } from '#hooks/useSyncedPref';
-import { closeModal } from '#modals/modalsSlice';
+import { closeModal, replaceModal } from '#modals/modalsSlice';
 import { addNotification } from '#notifications/notificationsSlice';
 import { transactions } from '#queries';
 import { liveQuery } from '#queries/liveQuery';
@@ -303,12 +305,31 @@ export type SelectLinkedAccountsModalProps =
       upgradingAccountId?: string;
     };
 
+/** A Plaid account as linked once its quantity offer is accepted. */
+function withQuantitySync(
+  account: SyncServerPlaidAccount,
+): SyncServerPlaidAccount {
+  return account.quantityOffer
+    ? {
+        ...account,
+        currency: account.quantityOffer.currency,
+        balance: account.quantityOffer.quantity,
+        balanceOnly: false,
+        syncQuantity: true,
+      }
+    : account;
+}
+
 export function SelectLinkedAccountsModal({
   requisitionId,
   externalAccounts,
   syncSource,
   upgradingAccountId,
 }: SelectLinkedAccountsModalProps) {
+  // Plaid accounts whose quantity offer the user accepted.
+  const [quantityOptIns, setQuantityOptIns] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
   const propsWithSortedExternalAccounts =
     useMemo<SelectLinkedAccountsModalProps>(() => {
       const toSort = externalAccounts ? [...externalAccounts] : [];
@@ -339,7 +360,12 @@ export function SelectLinkedAccountsModal({
         case 'plaid':
           return {
             syncSource: 'plaid',
-            externalAccounts: toSort as SyncServerPlaidAccount[],
+            externalAccounts: (toSort as SyncServerPlaidAccount[]).map(
+              account =>
+                quantityOptIns.has(account.account_id)
+                  ? withQuantitySync(account)
+                  : account,
+            ),
             upgradingAccountId,
           };
         case 'goCardless':
@@ -358,7 +384,13 @@ export function SelectLinkedAccountsModal({
         default:
           throw new Error(`Unrecognized sync source: ${String(syncSource)}`);
       }
-    }, [externalAccounts, syncSource, requisitionId, upgradingAccountId]);
+    }, [
+      externalAccounts,
+      syncSource,
+      requisitionId,
+      upgradingAccountId,
+      quantityOptIns,
+    ]);
 
   const { t } = useTranslation();
   const { isNarrowWidth } = useResponsive();
@@ -748,6 +780,50 @@ export function SelectLinkedAccountsModal({
     }));
   };
 
+  // A changed currency may leave the chosen account in another currency.
+  function onSetQuantitySync(account: SyncServerPlaidAccount, accept: boolean) {
+    setQuantityOptIns(previous => {
+      const next = new Set(previous);
+      if (accept) {
+        next.add(account.account_id);
+      } else {
+        next.delete(account.account_id);
+      }
+      return next;
+    });
+    const chosen = localAccounts.find(
+      acc => acc.id === chosenAccounts[account.account_id],
+    );
+    const currency = accept
+      ? account.quantityOffer?.currency
+      : account.currency;
+    if (chosen && !isLinkCompatible(chosen, currency, currencyContext)) {
+      setChosenAccounts(({ [account.account_id]: _dropped, ...rest }) => rest);
+    }
+  }
+
+  function onAddInvestments({ itemId, institution }: SyncServerPlaidAccount) {
+    dispatch(
+      replaceModal({
+        modal: {
+          name: 'plaid-link',
+          options: {
+            upgradingAccountId,
+            update: {
+              itemId,
+              investmentsFor: {
+                itemId,
+                institutionId: null,
+                institutionName: institution ?? null,
+                products: ['investments'],
+              },
+            },
+          },
+        },
+      }),
+    );
+  }
+
   const failedAccounts =
     propsWithSortedExternalAccounts.externalAccounts.filter(
       account => account.account_id in linkFailures,
@@ -765,6 +841,13 @@ export function SelectLinkedAccountsModal({
 
     return t('Link or unlink accounts');
   }, [draftLinkAccounts, t]);
+
+  // Desktop shows quantity offers in their own column when any account has one.
+  const showQuantityColumn =
+    syncSource === 'plaid' &&
+    propsWithSortedExternalAccounts.externalAccounts.some(account =>
+      plaidQuantityOption(account as SyncServerPlaidAccount, currencyContext),
+    );
 
   return (
     <Modal
@@ -836,6 +919,17 @@ export function SelectLinkedAccountsModal({
                     linkFailures[account.account_id]?.type ===
                     'balance-unavailable'
                   }
+                  plaidOption={
+                    syncSource === 'plaid' && (
+                      <PlaidQuantityOption
+                        account={account as SyncServerPlaidAccount}
+                        currencyContext={currencyContext}
+                        optIns={quantityOptIns}
+                        onSetQuantitySync={onSetQuantitySync}
+                        onAddInvestments={onAddInvestments}
+                      />
+                    )
+                  }
                 />
               ))}
             </View>
@@ -845,11 +939,14 @@ export function SelectLinkedAccountsModal({
             >
               <TableHeader>
                 <Cell value={t('Institution to Sync')} width={150} />
-                <Cell value={t('Bank Account To Sync')} width={150} />
+                <Cell value={t('Bank Account')} width={120} />
                 <Cell value={t('Balance')} width={120} />
                 <Cell value={t('Account in Actual')} width="flex" />
                 <Cell value={t('Starting Date')} width={120} />
                 <Cell value={t('Starting Balance')} width={120} />
+                {showQuantityColumn && (
+                  <Cell value={t('Quantity')} width={80} textAlign="center" />
+                )}
                 <Cell value={t('Actions')} width={150} textAlign="center" />
               </TableHeader>
 
@@ -888,6 +985,18 @@ export function SelectLinkedAccountsModal({
                         item,
                         chosenAccounts[item.account_id],
                       )}
+                      plaidOption={
+                        showQuantityColumn ? (
+                          <PlaidQuantityOption
+                            account={item as SyncServerPlaidAccount}
+                            inTable
+                            currencyContext={currencyContext}
+                            optIns={quantityOptIns}
+                            onSetQuantitySync={onSetQuantitySync}
+                            onAddInvestments={onAddInvestments}
+                          />
+                        ) : undefined
+                      }
                     />
                   );
                 }}
@@ -997,6 +1106,101 @@ export function SelectLinkedAccountsModal({
   );
 }
 
+/**
+ * Opt-ins for Plaid investment accounts: quantity sync for an account whose
+ * only security is a currency the budget can hold as a foreign account, or
+ * investment access for an Item that lacks it.
+ */
+/** What a Plaid account can offer: quantity sync, or the access it needs. */
+function plaidQuantityOption(
+  account: SyncServerPlaidAccount,
+  currencyContext: LinkCurrencyContext,
+): 'offer' | 'investments' | null {
+  if (
+    account.quantityOffer &&
+    typeof newAccountCurrency(
+      account.quantityOffer.currency,
+      currencyContext,
+    ) === 'string'
+  ) {
+    return 'offer';
+  }
+  return currencyContext.multicurrency && account.needsInvestments
+    ? 'investments'
+    : null;
+}
+
+type PlaidQuantityHandlers = {
+  currencyContext: LinkCurrencyContext;
+  optIns: ReadonlySet<string>;
+  onSetQuantitySync: (account: SyncServerPlaidAccount, accept: boolean) => void;
+  onAddInvestments: (account: SyncServerPlaidAccount) => void;
+};
+
+/**
+ * One account's quantity offer, in its card on phones or in the Quantity
+ * column of the desktop table.
+ */
+function PlaidQuantityOption({
+  account,
+  inTable = false,
+  currencyContext,
+  optIns,
+  onSetQuantitySync,
+  onAddInvestments,
+}: PlaidQuantityHandlers & {
+  account: SyncServerPlaidAccount;
+  inTable?: boolean;
+}) {
+  const { t } = useTranslation();
+  const kind = plaidQuantityOption(account, currencyContext);
+  if (kind === 'offer') {
+    const id = `plaid-quantity-${account.account_id}`;
+    const label = t(
+      'Sync as its quantity of {{currency}}, instead of only its balance',
+      { currency: account.quantityOffer?.currency },
+    );
+    const checked = optIns.has(account.account_id);
+    const onChange = ({ currentTarget }: { currentTarget: HTMLInputElement }) =>
+      onSetQuantitySync(account, currentTarget.checked);
+    return inTable ? (
+      <Tooltip content={label}>
+        <Checkbox
+          id={id}
+          aria-label={label}
+          checked={checked}
+          onChange={onChange}
+          style={{ marginRight: 0 }}
+        />
+      </Tooltip>
+    ) : (
+      <LabeledCheckbox id={id} checked={checked} onChange={onChange}>
+        {label}
+      </LabeledCheckbox>
+    );
+  }
+  if (kind === 'investments') {
+    const why = t(
+      'This account may hold a currency whose quantity can be synced. Checking needs investment access from the bank.',
+    );
+    return inTable ? (
+      <Tooltip content={why}>
+        <Button onPress={() => onAddInvestments(account)}>
+          <Trans>Allow</Trans>
+        </Button>
+      </Tooltip>
+    ) : (
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <Text>{why}</Text>
+        <Button onPress={() => onAddInvestments(account)}>
+          <Trans>Allow investment access</Trans>
+        </Button>
+      </View>
+    );
+  }
+  return null;
+}
+
 type ExternalAccount =
   | SyncServerGoCardlessAccount
   | SyncServerSimpleFinAccount
@@ -1092,6 +1296,8 @@ type TableRowProps = SharedAccountRowProps & {
     settings: CustomStartingSettings,
   ) => void;
   showStartingOptions: boolean;
+  /** The Quantity cell's contents; undefined leaves the column out. */
+  plaidOption?: ReactNode;
 };
 
 // Providers report balances in major units, as decimal strings or numbers. A
@@ -1170,6 +1376,7 @@ function TableRow({
   showStartingOptions,
   currencyContext,
   destinationFormat,
+  plaidOption,
 }: TableRowProps) {
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const { addOnBudgetAccountOption, addOffBudgetAccountOption } =
@@ -1209,8 +1416,8 @@ function TableRow({
           </View>
         </Tooltip>
       </Field>
-      {/* Bank Account To Sync */}
-      <Field width={150}>
+      {/* Bank Account */}
+      <Field width={120}>
         <Tooltip content={externalAccount.name}>
           <View
             style={{
@@ -1298,6 +1505,15 @@ function TableRow({
             ) : null}
           </Field>
         </>
+      )}
+      {plaidOption !== undefined && (
+        <Field
+          width={80}
+          truncate={false}
+          style={{ alignItems: 'center', justifyContent: 'center' }}
+        >
+          {plaidOption}
+        </Field>
       )}
       {/* Actions */}
       <Field width={150}>
@@ -1526,6 +1742,8 @@ function StartingOptionsFields({
 type AccountCardProps = SharedAccountRowProps & {
   /** The link needs an explicit starting balance. */
   needsStartingBalance: boolean;
+  /** A provider-specific option shown above the card's link button. */
+  plaidOption?: ReactNode;
   customStartingDate: CustomStartingSettings;
   onSetCustomStartingDate: (
     accountId: string,
@@ -1545,6 +1763,7 @@ function AccountCard({
   currencyContext,
   destinationFormat,
   needsStartingBalance,
+  plaidOption,
 }: AccountCardProps) {
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const { addOnBudgetAccountOption, addOffBudgetAccountOption } =
@@ -1724,6 +1943,8 @@ function AccountCard({
           />
         </FormatIn>
       )}
+
+      {plaidOption}
 
       {chosenAccount ? (
         <Button

@@ -98,7 +98,15 @@ export class DocumentDirError extends Error {
 
 export class ValidationError extends Error {}
 
-export class TransactionError extends Error {}
+export class TransactionError extends Error {
+  constructor(
+    message?: string,
+    /** A missing rate's currency, when it is not the account's. */
+    readonly rateCurrency?: string,
+  ) {
+    super(message);
+  }
+}
 
 export class RuleError extends Error {
   type: string;

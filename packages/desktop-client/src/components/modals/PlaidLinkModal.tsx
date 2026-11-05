@@ -85,6 +85,14 @@ export function PlaidLinkModal({
 
     async function finish(publicToken?: string) {
       dispatch(closeModal());
+      if (update?.investmentsFor) {
+        await selectPlaidAccounts(
+          dispatch,
+          update.investmentsFor,
+          upgradingAccountId,
+        );
+        return;
+      }
       // Update mode keeps the Item's access token, so it adds no Item.
       if (update) return;
       if (!publicToken) {
@@ -151,7 +159,12 @@ export function PlaidLinkModal({
 
     const { data, error } = await sendCatch(
       'plaid-link-token',
-      update ? { itemId: update.itemId } : {},
+      update
+        ? {
+            itemId: update.itemId,
+            addInvestments: update.investmentsFor !== undefined,
+          }
+        : {},
     );
     if (isClosed.current) return;
     setIsLoading(false);
@@ -190,10 +203,17 @@ export function PlaidLinkModal({
               </>
             ) : update ? (
               <Paragraph style={{ marginBottom: 0 }}>
-                <Trans>
-                  Plaid opens in a new window so you can log in to your bank
-                  again.
-                </Trans>
+                {update.investmentsFor ? (
+                  <Trans>
+                    Plaid opens in a new window so your bank can allow
+                    investment access.
+                  </Trans>
+                ) : (
+                  <Trans>
+                    Plaid opens in a new window so you can log in to your bank
+                    again.
+                  </Trans>
+                )}
               </Paragraph>
             ) : (
               <>

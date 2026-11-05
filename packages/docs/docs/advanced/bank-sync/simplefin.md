@@ -67,7 +67,7 @@ Budget-specific credentials take precedence over global credentials. Resetting t
    <img width="662" alt="The Link account dialog with Link bank account on the SimpleFIN card highlighted" src="/img/advanced/bank-sync/simplefin-link-bank-account@2x.webp" />
 
 3. A Link Accounts box will pop up. To link a SimpleFIN account to an Actual account, click the "Set up bank sync" button in the same row.
-   - The "Bank Account To Sync" column contains the names of the accounts found via SimpleFIN
+   - The "Bank Account" column contains the names of the accounts found via SimpleFIN
    - The "Account in Actual" column contains the name of the Actual account it is linked to.
    - You can also click in the "Account in Actual" column, instead of clicking the "Set up bank sync" button.
 

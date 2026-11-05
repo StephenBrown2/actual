@@ -12,7 +12,7 @@ import { computeEntryPair } from '#server/exchange-rates/app';
 import { runMutator } from '#server/mutators';
 import { post } from '#server/post';
 import { getServer } from '#server/server-config';
-import { batchMessages } from '#server/sync';
+import { batchMessages, getBatchedValue } from '#server/sync';
 import { effectiveEncoding } from '#server/sync/coupled-cells';
 import { batchUpdateTransactions } from '#server/transactions';
 import {
@@ -26,11 +26,15 @@ import {
 } from '#server/transactions/foreign-guard';
 import type { ForeignEdit } from '#server/transactions/foreign-guard';
 import { runRules } from '#server/transactions/transaction-rules';
-import { getRecordedAmountPrecision } from '#server/util/currency';
+import {
+  getDefaultCurrencyCode,
+  getRecordedAmountPrecision,
+} from '#server/util/currency';
 import {
   defaultMappings,
   mappingsFromString,
 } from '#server/util/custom-sync-mapping';
+import { reviewedAmountEncoding } from '#shared/amount-encoding';
 import { rescaleDecimalAmount } from '#shared/amount-rescale';
 import * as monthUtils from '#shared/months';
 import { q } from '#shared/query';
@@ -45,7 +49,11 @@ import {
 } from '#shared/util';
 import type {
   AccountEntity,
+  BankSyncAmount,
   BankSyncResponse,
+  PlaidHoldings,
+  PlaidInvestmentTransaction,
+  PlaidQuantitySecurity,
   TransactionEntity,
 } from '#types/models';
 
@@ -55,6 +63,7 @@ import {
   downloadPlaidBalance,
   plaidDefaultStartDate,
   plaidPost,
+  plaidQuantityDownload,
 } from './plaid';
 import { title } from './title';
 
@@ -380,7 +389,12 @@ async function downloadPlaidTransactions(
   newAccount: boolean,
   syncStartDate: string,
   balanceOnly: boolean,
+  linkQuantity: PlaidQuantitySecurity | undefined,
 ) {
+  const quantity = linkQuantity ?? (await plaidQuantityPreference(id));
+  if (quantity) {
+    return downloadPlaidQuantities(acctId, itemId, quantity, syncStartDate);
+  }
   if (
     balanceOnly ||
     !(await readSyncPreference(id, 'sync-import-transactions', 'true'))
@@ -417,6 +431,48 @@ async function downloadPlaidTransactions(
     startingBalanceCurrency: res.startingBalanceCurrency,
     nextCursor: res.nextCursor,
   };
+}
+
+/** The security a quantity-synced account follows, in the account currency. */
+async function plaidQuantityPreference(
+  id: AccountEntity['id'],
+): Promise<PlaidQuantitySecurity | null> {
+  const row = await db.first<{ value: string | null; currency: string | null }>(
+    `SELECT p.value, a.currency FROM preferences p JOIN accounts a ON a.id = ?
+     WHERE p.id = ?`,
+    [id, `plaid-quantity-${id}`],
+  );
+  return row?.value && row.currency
+    ? { securityId: row.value, currency: row.currency }
+    : null;
+}
+
+async function downloadPlaidQuantities(
+  acctId: string,
+  itemId: string,
+  quantity: PlaidQuantitySecurity,
+  startDate: string,
+) {
+  const [holdings, investments] = await Promise.all([
+    plaidPost<PlaidHoldings & Partial<BankSyncResponse>>(
+      '/investments/holdings',
+      { itemId, accountId: acctId },
+    ),
+    plaidPost<
+      { transactions: PlaidInvestmentTransaction[] } & Partial<BankSyncResponse>
+    >('/investments/transactions', {
+      itemId,
+      accountId: acctId,
+      startDate,
+      endDate: monthUtils.currentDay(),
+    }),
+  ]);
+  for (const res of [holdings, investments]) {
+    if (res.error_code) {
+      throw BankSyncError(res.error_type, res.error_code);
+    }
+  }
+  return plaidQuantityDownload(quantity, holdings, investments.transactions);
 }
 
 /**
@@ -723,6 +779,8 @@ async function normalizeBankSyncTransactions(
         raw_synced_data: JSON.stringify(trans),
       },
       pendingTransactionId: trans.pendingTransactionId,
+      // A foreign row's own base, used instead of the account's saved rate.
+      baseAmount: isForeign ? trans.baseAmount : undefined,
     });
   }
 
@@ -801,6 +859,8 @@ export async function reconcileTransactions(
   const exchangeReplacements = new Set<string>();
   // Foreign pairs are frozen, so a posted amount is authorized row by row.
   const foreignEdits = new Map<string, ForeignEdit>();
+  // Provider-supplied bases of new foreign rows, by row id.
+  const providedBases = new Map<string, BankSyncAmount>();
   const existingPayeeMap = new Map<string, string>();
 
   const {
@@ -819,7 +879,8 @@ export async function reconcileTransactions(
 
   // Finally, generate & commit the changes
   for (const step of transactionsStep3) {
-    const { trans, subtransactions, pendingMatch, matchAccount } = step;
+    const { trans, subtransactions, pendingMatch, matchAccount, baseAmount } =
+      step;
     let { match } = step;
     // A skipped transaction still takes part in the matching above, so the
     // other transactions match the same way as in the import preview. It is
@@ -1007,6 +1068,9 @@ export async function reconcileTransactions(
         category: trans.category || null,
         cleared: trans.cleared ?? defaultCleared,
       };
+      if (baseAmount) {
+        providedBases.set(finalTransaction.id, baseAmount);
+      }
 
       if (subtransactions && subtransactions.length > 0) {
         added.push(...makeSplitTransaction(finalTransaction, subtransactions));
@@ -1017,22 +1081,28 @@ export async function reconcileTransactions(
   }
 
   // A foreign row without a supplied base gets one from the rate for its
-  // final date; any missing rate fails the whole request before writes.
+  // final date, converting the provider's base when it has one; any missing
+  // rate fails the whole request before writes.
   const previewBases: ReconcileTransactionsResult['previewBases'] = [];
   const missingRates: ReconcileTransactionsResult['missingRates'] = [];
   if (foreign) {
     const missingDates = new Set<string>();
+    let rateCurrency: string | undefined;
     for (const trans of added) {
       if (trans.amount != null) continue;
-      const pair = await computeEntryPair({
-        quoteCurrency: foreign.currencyCode,
-        nativePrecision: foreign.precision,
-        date: trans.date,
-        nativeAmount: trans.transaction_amount,
-      });
+      const provided = providedBases.get(trans.id);
+      const pair = provided
+        ? await providedBase(provided, trans.date)
+        : await computeEntryPair({
+            quoteCurrency: foreign.currencyCode,
+            nativePrecision: foreign.precision,
+            date: trans.date,
+            nativeAmount: trans.transaction_amount,
+          });
       if (pair.status !== 'ok') {
         missingDates.add(trans.date);
         missingRates.push({ transaction: trans, date: trans.date });
+        rateCurrency ??= provided?.currency;
         continue;
       }
       trans.amount = pair.baseAmount;
@@ -1042,6 +1112,7 @@ export async function reconcileTransactions(
     if (missingDates.size > 0 && !isPreview) {
       throw new TransactionError(
         `rate-unavailable: ${[...missingDates].sort().join(', ')}`,
+        rateCurrency,
       );
     }
   }
@@ -1180,6 +1251,7 @@ export async function matchTransactions(
     trans: originalTrans,
     subtransactions,
     pendingTransactionId,
+    baseAmount,
   } of normalized) {
     // Run the rules
     const trans = await runRules(
@@ -1324,6 +1396,7 @@ export async function matchTransactions(
       pendingMatch:
         pendingTransactionId != null &&
         match?.imported_id === pendingTransactionId,
+      baseAmount,
     });
   }
 
@@ -1514,6 +1587,32 @@ export function encodeStartingBalance(
   return result;
 }
 
+/**
+ * A provider value as a budget-currency base, scaled by `share`, converted
+ * with the saved rate for the date when it is in another currency. Writes no
+ * rates.
+ */
+async function providedBase(
+  { amount, currency }: BankSyncAmount,
+  date: string,
+  share = 1,
+) {
+  if (currency === (await getDefaultCurrencyCode())) {
+    const baseAmount = encodeBankAmount(amount, getRecordedAmountPrecision());
+    return {
+      status: 'ok' as const,
+      baseAmount: Math.round(baseAmount * share),
+    };
+  }
+  const { precision } = reviewedAmountEncoding(currency);
+  return computeEntryPair({
+    quoteCurrency: currency,
+    nativePrecision: precision,
+    date,
+    nativeAmount: Math.round(encodeBankAmount(amount, precision) * share),
+  });
+}
+
 /** Dates listed by a `rate-unavailable` failure, or null for other errors. */
 export function rateUnavailableDates(err: unknown): string[] | null {
   const prefix = 'rate-unavailable: ';
@@ -1701,12 +1800,18 @@ async function readSyncPreference(
   name: string,
   defaultValue: 'true' | 'false',
 ) {
-  const data = await aqlQuery(
-    q('preferences')
-      .filter({ id: `${name}-${id}` })
-      .select('value'),
-  );
-  return String(data?.data?.[0]?.value ?? defaultValue) === 'true';
+  // A link's preference writes are queued in the batch that imports.
+  const queued = getBatchedValue('preferences', `${name}-${id}`, 'value');
+  const value = queued
+    ? queued.value
+    : (
+        await aqlQuery(
+          q('preferences')
+            .filter({ id: `${name}-${id}` })
+            .select('value'),
+        )
+      )?.data?.[0]?.value;
+  return String(value ?? defaultValue) === 'true';
 }
 
 /**
@@ -1813,12 +1918,29 @@ async function processForeignBankSyncDownload(
 
       const missingDates = new Set<string>();
       let initialId = null;
-      const pair = await computeEntryPair({
-        quoteCurrency: currencyCode,
-        nativePrecision: precision,
-        date: startingBalanceDate,
-        nativeAmount: balance,
-      });
+      // A provider that values the current balance in another currency
+      // values the starting balance at the same price.
+      const current = providerCurrentBalance(download, acctRow, currencyCode);
+      const currentAmount =
+        current === null ? 0 : encodeBankAmount(current, precision);
+      const base =
+        download.startingBalanceBase && currentAmount !== 0
+          ? await providedBase(
+              download.startingBalanceBase,
+              startingBalanceDate,
+              balance / currentAmount,
+            )
+          : null;
+      const pair =
+        base?.status === 'rate-unavailable'
+          ? base
+          : await computeEntryPair({
+              quoteCurrency: currencyCode,
+              nativePrecision: precision,
+              date: startingBalanceDate,
+              nativeAmount: balance,
+              ...(base?.status === 'ok' && { baseAmount: base.baseAmount }),
+            });
       if (pair.status === 'ok') {
         const payee = await getStartingBalancePayee();
         initialId = await db.insertTransaction({
@@ -1834,6 +1956,10 @@ async function processForeignBankSyncDownload(
       } else {
         missingDates.add(startingBalanceDate);
       }
+      let rateCurrency =
+        base?.status === 'rate-unavailable'
+          ? download.startingBalanceBase.currency
+          : undefined;
 
       let reconciled: ReconcileTransactionsResult = {
         added: [],
@@ -1850,10 +1976,12 @@ async function processForeignBankSyncDownload(
         const dates = rateUnavailableDates(err);
         if (!dates) throw err;
         dates.forEach(date => missingDates.add(date));
+        rateCurrency ??= err.rateCurrency;
       }
       if (missingDates.size > 0) {
         throw new TransactionError(
           `rate-unavailable: ${[...missingDates].sort().join(', ')}`,
+          rateCurrency,
         );
       }
       result = { ...reconciled, added: [initialId, ...reconciled.added] };
@@ -2007,6 +2135,7 @@ export async function downloadBankSyncAccount(
     customStartingDate,
     fileId,
     balanceOnly = false,
+    plaidQuantity,
   }: {
     userId: string | undefined;
     userKey: string | undefined;
@@ -2017,6 +2146,8 @@ export async function downloadBankSyncAccount(
     fileId?: string;
     /** A link that writes the balance-only preference with its import. */
     balanceOnly?: boolean;
+    /** A link that writes the quantity preference with its import. */
+    plaidQuantity?: PlaidQuantitySecurity;
   },
 ) {
   const oldestTransaction = await getAccountOldestTransaction(id);
@@ -2052,6 +2183,7 @@ export async function downloadBankSyncAccount(
       newAccount,
       syncStartDate,
       balanceOnly,
+      plaidQuantity,
     );
   } else if (syncSource === 'goCardless') {
     download = await downloadGoCardlessTransactions(

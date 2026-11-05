@@ -1,11 +1,14 @@
 import type { ReactNode } from 'react';
 
 import { initServer } from '@actual-app/core/platform/client/connection';
-import type { AccountEntity } from '@actual-app/core/types/models';
+import type {
+  AccountEntity,
+  SyncServerPlaidAccount,
+} from '@actual-app/core/types/models';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { createTestAppStore, TestProviders } from '#mocks';
-import { closeModal } from '#modals/modalsSlice';
+import { closeModal, replaceModal } from '#modals/modalsSlice';
 import type * as ModalsSlice from '#modals/modalsSlice';
 import { mergeSyncedPrefs } from '#prefs/prefsSlice';
 
@@ -41,7 +44,11 @@ vi.mock('#components/common/Modal', () => ({
 }));
 vi.mock('#modals/modalsSlice', async importOriginal => {
   const actual = await importOriginal<typeof ModalsSlice>();
-  return { ...actual, closeModal: vi.fn(actual.closeModal) };
+  return {
+    ...actual,
+    closeModal: vi.fn(actual.closeModal),
+    replaceModal: vi.fn(actual.replaceModal),
+  };
 });
 vi.mock('#queries/liveQuery', () => ({
   liveQuery: (
@@ -280,6 +287,120 @@ it('waits for a Plaid link and reports a history timeout', async () => {
     await screen.findByText(/has not sent this account's transaction history/),
   ).toBeInTheDocument();
   expect(closeModal).not.toHaveBeenCalled();
+});
+
+describe('Plaid quantity sync', () => {
+  const investment = {
+    account_id: 'btc',
+    name: 'Individual - EUR',
+    official_name: null,
+    mask: null,
+    balance: 6000,
+    currency: 'USD',
+    institution: 'Bank',
+    itemId: 'item-1',
+    balanceOnly: true,
+  };
+
+  function renderPlaid(account: SyncServerPlaidAccount, multicurrency = true) {
+    const store = createTestAppStore();
+    if (multicurrency) {
+      store.dispatch(
+        mergeSyncedPrefs({
+          defaultCurrencyCode: 'USD',
+          amountEncoding: JSON.stringify({
+            version: 1,
+            currencyCode: 'USD',
+            precision: 2,
+          }),
+          'flags.currency': 'true',
+          'flags.multicurrency': 'true',
+        }),
+      );
+    }
+    localAccounts.value = [];
+    render(
+      <TestProviders store={store}>
+        <SelectLinkedAccountsModal
+          syncSource="plaid"
+          externalAccounts={[account]}
+        />
+      </TestProviders>,
+    );
+  }
+
+  const offer = { securityId: 'sec-1', currency: 'EUR', quantity: 5000 };
+
+  it('links the quantity in the offered currency once accepted', async () => {
+    linkPlaid.mockResolvedValueOnce({ type: 'ok', currencyMismatches: 0 });
+    renderPlaid({ ...investment, quantityOffer: offer });
+
+    // On phones the offer sits in the account's own card.
+    fireEvent.click(
+      screen.getByLabelText(
+        'Sync as its quantity of EUR, instead of only its balance',
+      ),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Link account' }));
+    fireEvent.click((await screen.findAllByText('Create new account')).at(-1)!);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Link accounts' }),
+    );
+
+    await waitFor(() => expect(closeModal).toHaveBeenCalled());
+    expect(linkPlaid).toHaveBeenCalledWith(
+      expect.objectContaining({
+        externalAccount: expect.objectContaining({
+          currency: 'EUR',
+          balance: 5000,
+          balanceOnly: false,
+          syncQuantity: true,
+        }),
+      }),
+    );
+  });
+
+  it('puts the offer in its row of the desktop table', () => {
+    narrow.value = false;
+    renderPlaid({ ...investment, quantityOffer: offer });
+    expect(screen.getByText('Quantity')).toBeInTheDocument();
+    expect(
+      screen.getByRole('checkbox', {
+        name: 'Sync as its quantity of EUR, instead of only its balance',
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('leaves the quantity column out when no account has an offer', () => {
+    narrow.value = false;
+    renderPlaid(investment);
+    expect(screen.queryByText('Quantity')).toBeNull();
+  });
+
+  it('offers nothing when the budget cannot hold the currency', () => {
+    renderPlaid({ ...investment, quantityOffer: offer }, false);
+    expect(screen.queryByText(/as its quantity of/)).toBeNull();
+  });
+
+  it('opens update mode to add Investments to the Item', () => {
+    renderPlaid({ ...investment, needsInvestments: true });
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Allow investment access' }),
+    );
+
+    expect(replaceModal).toHaveBeenCalledWith({
+      modal: {
+        name: 'plaid-link',
+        options: expect.objectContaining({
+          update: expect.objectContaining({
+            itemId: 'item-1',
+            investmentsFor: expect.objectContaining({ itemId: 'item-1' }),
+          }),
+        }),
+      },
+    });
+  });
 });
 
 it('does not preselect an account in another currency', () => {

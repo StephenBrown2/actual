@@ -1,0 +1,106 @@
+{
+  "item": {
+    "item_id": "item-fx7Qm2RkVa9LwZt4BcN8pYd3HsJ",
+    "institution_id": "ins_900001"
+  },
+  "accounts": [
+    {
+      "account_id": "acct-inv-K3vR8mQ2wLp5Zx7NcT1bYh4Ds",
+      "name": "Individual - BTC",
+      "official_name": "Example Bitcoin Account",
+      "mask": "7302",
+      "type": "investment",
+      "balances": {
+        "current": 9630,
+        "iso_currency_code": "USD",
+        "unofficial_currency_code": null
+      }
+    },
+    {
+      "account_id": "acct-cash-P9tW2nE6yHq1Lb5Vr8Mz3Kc7F",
+      "name": "Individual - USD",
+      "official_name": "Example USD Account",
+      "mask": "7302",
+      "type": "depository",
+      "balances": {
+        "current": 1250,
+        "iso_currency_code": "USD",
+        "unofficial_currency_code": null
+      }
+    }
+  ],
+  "securities": [
+    {
+      "security_id": "sec-Hq2Lx9Vt4Rb7Nm1Kp6Wz3Cy8D",
+      "ticker_symbol": "BTC",
+      "unofficial_currency_code": null,
+      "type": "cryptocurrency",
+      "is_cash_equivalent": true
+    }
+  ],
+  "holdings": [
+    {
+      "account_id": "acct-inv-K3vR8mQ2wLp5Zx7NcT1bYh4Ds",
+      "security_id": "sec-Hq2Lx9Vt4Rb7Nm1Kp6Wz3Cy8D",
+      "quantity": 0.15,
+      "institution_value": 9630,
+      "iso_currency_code": "USD"
+    }
+  ],
+  "investment_transactions": [
+    {
+      "investment_transaction_id": "inv-buy-A1",
+      "security_id": "sec-Hq2Lx9Vt4Rb7Nm1Kp6Wz3Cy8D",
+      "date": "2026-10-08",
+      "name": "Recurring buy from cash balance (ref: QZ81) - PURCHASED",
+      "quantity": 0.0075,
+      "amount": 480,
+      "iso_currency_code": "USD"
+    },
+    {
+      "investment_transaction_id": "inv-buy-B2",
+      "security_id": "sec-Hq2Lx9Vt4Rb7Nm1Kp6Wz3Cy8D",
+      "date": "2026-10-07",
+      "name": "Recurring buy from cash balance (ref: PL42) - PURCHASED",
+      "quantity": 0.006,
+      "amount": 390,
+      "iso_currency_code": "USD"
+    },
+    {
+      "investment_transaction_id": "inv-buy-C3",
+      "security_id": "sec-Hq2Lx9Vt4Rb7Nm1Kp6Wz3Cy8D",
+      "date": "2026-10-07",
+      "name": "Recurring buy from cash balance (ref: MV07) - PURCHASED",
+      "quantity": 0.0048,
+      "amount": 312,
+      "iso_currency_code": "USD"
+    },
+    {
+      "investment_transaction_id": "inv-sell-D4",
+      "security_id": "sec-Hq2Lx9Vt4Rb7Nm1Kp6Wz3Cy8D",
+      "date": "2026-10-01",
+      "name": "Bitcoin order (ref: TR55) - SOLD",
+      "quantity": -0.0015,
+      "amount": -99,
+      "iso_currency_code": "USD"
+    },
+    {
+      "investment_transaction_id": "inv-interest-E5",
+      "security_id": "sec-Hq2Lx9Vt4Rb7Nm1Kp6Wz3Cy8D",
+      "date": "2026-10-01",
+      "name": "Interest payout (ref: GH19) - INCOME",
+      "quantity": 0.0002,
+      "amount": -13.2,
+      "iso_currency_code": "USD"
+    },
+    {
+      "investment_transaction_id": "inv-buy-F6",
+      "security_id": "sec-Hq2Lx9Vt4Rb7Nm1Kp6Wz3Cy8D",
+      "date": "2026-09-29",
+      "name": "Bitcoin order (ref: WD63) - PURCHASED",
+      "quantity": 0.003,
+      "amount": 201,
+      "iso_currency_code": "USD"
+    }
+  ]
+}

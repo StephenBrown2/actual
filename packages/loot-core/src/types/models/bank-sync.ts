@@ -11,6 +11,11 @@ export type BankSyncTransaction = GoCardlessTransaction & {
   pendingTransactionId?: string;
   /** The row's date (YYYY-MM-DD), as providers send it beside bookingDate. */
   date?: string;
+  /**
+   * The row's value, in a currency other than its own, that a foreign
+   * account stores as its base instead of one derived from a saved rate.
+   */
+  baseAmount?: BankSyncAmount;
 };
 
 export type BankSyncResponse = {
@@ -24,6 +29,8 @@ export type BankSyncResponse = {
   startingBalance: string | null;
   /** Currency of startingBalance, or null when unknown or mixed. */
   startingBalanceCurrency?: string | null;
+  /** The value of startingBalance in another currency, like `baseAmount`. */
+  startingBalanceBase?: BankSyncAmount;
   /** Plaid's `/transactions/sync` cursor after these rows. */
   nextCursor?: string;
   /** Plaid has not finished downloading the history a no-cursor sync asked for. */

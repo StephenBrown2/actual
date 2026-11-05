@@ -10,7 +10,10 @@ import type {
   AccountEntity,
   BankSyncResponse,
   PlaidAccount,
+  PlaidHoldings,
+  PlaidInvestmentTransaction,
   PlaidItem,
+  PlaidQuantitySecurity,
   SyncServerPlaidAccount,
 } from '#types/models';
 
@@ -83,20 +86,141 @@ async function fetchPlaidAccounts(itemId: string) {
   return accounts;
 }
 
+/**
+ * The account's security when its holdings, cash aside, are exactly one
+ * security whose ticker or unofficial code is a supported currency.
+ */
+export function plaidQuantitySecurity(
+  accountId: string,
+  { holdings, securities }: PlaidHoldings,
+): (PlaidQuantitySecurity & { quantity: number }) | null {
+  const held = holdings.flatMap(holding => {
+    const security = securities.find(
+      candidate => candidate.security_id === holding.security_id,
+    );
+    return holding.account_id === accountId && security?.type !== 'cash'
+      ? [{ holding, security }]
+      : [];
+  });
+  if (held.length !== 1) return null;
+  const [{ holding, security }] = held;
+  const currency = [
+    security?.ticker_symbol,
+    security?.unofficial_currency_code,
+  ].find(code => code && isReviewedCurrency(code));
+  return currency
+    ? {
+        securityId: holding.security_id,
+        currency,
+        quantity: holding.quantity,
+      }
+    : null;
+}
+
 export async function getPlaidAccounts(
   item: PlaidItem,
 ): Promise<SyncServerPlaidAccount[]> {
-  return (await fetchPlaidAccounts(item.itemId)).map(account => ({
-    account_id: account.account_id,
-    name: account.name,
-    official_name: account.official_name,
-    mask: account.mask,
-    balance: plaidBalance(account) ?? 0,
-    currency: plaidAccountCurrency(account.balances),
-    institution: item.institutionName ?? undefined,
-    itemId: item.itemId,
-    balanceOnly: account.type === 'investment',
-  }));
+  const accounts = await fetchPlaidAccounts(item.itemId);
+  const hasInvestments = item.products.includes('investments');
+  // Holdings only refine the offer, so without them investment accounts
+  // still link balance-only.
+  const holdings =
+    hasInvestments && accounts.some(account => account.type === 'investment')
+      ? await plaidPost<PlaidHoldings & { error_code?: string }>(
+          '/investments/holdings',
+          { itemId: item.itemId },
+        ).then(
+          res => (res.error_code ? null : res),
+          () => null,
+        )
+      : null;
+  return accounts.map(account => {
+    const investment = account.type === 'investment';
+    const quantityOffer =
+      investment && holdings
+        ? plaidQuantitySecurity(account.account_id, holdings)
+        : null;
+    return {
+      account_id: account.account_id,
+      name: account.name,
+      official_name: account.official_name,
+      mask: account.mask,
+      balance: plaidBalance(account) ?? 0,
+      currency: plaidAccountCurrency(account.balances),
+      institution: item.institutionName ?? undefined,
+      itemId: item.itemId,
+      balanceOnly: investment,
+      ...(quantityOffer && { quantityOffer }),
+      ...(investment && !hasInvestments && { needsInvestments: true }),
+    };
+  });
+}
+
+/**
+ * Plaid's number as its shortest decimal string, left unrounded so the bank
+ * amount encoder rounds it like every other bank amount. `String` writes
+ * values below 1e-6 in exponent form, which the encoder rejects.
+ */
+function decimal(value: number) {
+  const text = String(value);
+  const small = /^(-?)(\d)(?:\.(\d+))?e-(\d+)$/.exec(text);
+  return small
+    ? `${small[1]}0.${'0'.repeat(Number(small[4]) - 1)}${small[2]}${small[3] ?? ''}`
+    : text;
+}
+
+/**
+ * A quantity-synced account's download: each row's native amount is its
+ * quantity, valued at `|amount|` with the quantity's sign (Plaid's amount
+ * sign does not follow quantity: interest has a negative amount for a
+ * positive quantity). The holding gives the current quantity and its value.
+ */
+export function plaidQuantityDownload(
+  { securityId, currency }: PlaidQuantitySecurity,
+  { holdings }: PlaidHoldings,
+  investmentTransactions: PlaidInvestmentTransaction[],
+) {
+  const valued = (code: string | null) =>
+    code && isReviewedCurrency(code) ? code : null;
+  const transactions = investmentTransactions
+    .filter(trans => trans.security_id === securityId)
+    .map(trans => {
+      const baseCurrency = valued(trans.iso_currency_code);
+      return {
+        transactionId: trans.investment_transaction_id,
+        booked: true,
+        date: trans.date,
+        payeeName: trans.name,
+        transactionAmount: {
+          amount: decimal(trans.quantity),
+          currency,
+        },
+        ...(baseCurrency && {
+          baseAmount: {
+            amount: decimal(Math.sign(trans.quantity) * Math.abs(trans.amount)),
+            currency: baseCurrency,
+          },
+        }),
+      };
+    })
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const holding = holdings.find(
+    candidate => candidate.security_id === securityId,
+  );
+  const valueCurrency = valued(holding?.iso_currency_code ?? null);
+  return {
+    transactions,
+    // A holding sold off is no longer listed.
+    startingBalance: decimal(holding?.quantity ?? 0),
+    startingBalanceCurrency: currency,
+    ...(holding &&
+      valueCurrency && {
+        startingBalanceBase: {
+          amount: decimal(holding.institution_value),
+          currency: valueCurrency,
+        },
+      }),
+  };
 }
 
 /** A balance-only account's current balance, with no transactions. */

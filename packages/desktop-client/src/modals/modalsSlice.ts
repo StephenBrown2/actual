@@ -10,6 +10,7 @@ import type {
   NewRuleEntity,
   NewUserEntity,
   NoteEntity,
+  PlaidItem,
   PlaidStatus,
   RuleEntity,
   ScheduleEntity,
@@ -156,8 +157,11 @@ export type Modal =
       options: {
         trialPlan?: boolean;
         upgradingAccountId?: AccountEntity['id'];
-        /** Update mode on an existing Item, to log in to the bank again. */
-        update?: { itemId: string };
+        /**
+         * Update mode on an existing Item. With `investmentsFor`, it asks for
+         * investment access and then lists that Item's accounts again.
+         */
+        update?: { itemId: string; investmentsFor?: PlaidItem };
       };
     }
   | {
