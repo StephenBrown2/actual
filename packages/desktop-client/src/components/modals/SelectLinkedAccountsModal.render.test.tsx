@@ -191,6 +191,34 @@ it('stays open on a missing rate and retries after the rate is saved', async () 
   );
 });
 
+it('leaves an untouched starting balance to the bank history', async () => {
+  linkSimpleFin.mockResolvedValue({ type: 'ok', currencyMismatches: 0 });
+  localAccounts.value = [];
+  renderModal([externalAccount], undefined);
+  fireEvent.click(screen.getByRole('button', { name: 'Link account' }));
+  fireEvent.click((await screen.findAllByText('Create new account')).at(-1)!);
+
+  // Opening the field and leaving it without typing keeps the bank's value.
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'From bank history' }),
+  );
+  const input = screen
+    .getByText('Balance on that date:')
+    .nextElementSibling?.querySelector('input');
+  assert(input, 'Expected starting balance input');
+  fireEvent.focus(input);
+  fireEvent.blur(input);
+  expect(
+    await screen.findByRole('button', { name: 'From bank history' }),
+  ).toBeVisible();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Link accounts' }));
+  await waitFor(() => expect(linkSimpleFin).toHaveBeenCalled());
+  expect(linkSimpleFin).toHaveBeenLastCalledWith(
+    expect.objectContaining({ startingBalance: undefined }),
+  );
+});
+
 it('asks for a native starting balance when the bank reports none', async () => {
   linkSimpleFin
     .mockResolvedValueOnce({ type: 'balance-unavailable' })
