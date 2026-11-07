@@ -990,6 +990,10 @@ export function SelectLinkedAccountsModal({
                       customStartingDate={startingSettingsFor(item)}
                       onSetCustomStartingDate={setCustomStartingDate}
                       showStartingOptions={shouldShowStartingOptions}
+                      needsStartingBalance={
+                        linkFailures[item.account_id]?.type ===
+                        'balance-unavailable'
+                      }
                       currencyContext={currencyContext}
                       destinationFormat={destinationFormat(
                         item,
@@ -1315,6 +1319,8 @@ type TableRowProps = SharedAccountRowProps & {
   showStartingOptions: boolean;
   /** The Quantity cell's contents; undefined leaves the column out. */
   plaidOption?: ReactNode;
+  /** The link needs an explicit starting balance. */
+  needsStartingBalance: boolean;
 };
 
 // Providers report balances in major units, as decimal strings or numbers. A
@@ -1391,6 +1397,7 @@ function TableRow({
   customStartingDate,
   onSetCustomStartingDate,
   showStartingOptions,
+  needsStartingBalance,
   currencyContext,
   destinationFormat,
   plaidOption,
@@ -1487,6 +1494,7 @@ function TableRow({
             externalBalance={externalAccount.balance}
             customStartingDate={customStartingDate}
             onSetCustomStartingDate={onSetCustomStartingDate}
+            needsStartingBalance={needsStartingBalance}
             layout="inline"
           />
         </FormatIn>
@@ -1646,6 +1654,8 @@ type StartingOptionsFieldsProps = {
     accountId: string,
     settings: CustomStartingSettings,
   ) => void;
+  /** The bank reported no balance, so the user must type one. */
+  needsStartingBalance: boolean;
   layout: 'inline' | 'stacked';
 };
 
@@ -1654,6 +1664,7 @@ function StartingOptionsFields({
   externalBalance,
   customStartingDate,
   onSetCustomStartingDate,
+  needsStartingBalance,
   layout,
 }: StartingOptionsFieldsProps) {
   const precision = useAmountPrecision();
@@ -1679,9 +1690,11 @@ function StartingOptionsFields({
         </Field>
         {/* Starting Balance */}
         <Field width={120} truncate={false} style={{ textAlign: 'right' }}>
-          <AmountInput
-            value={customStartingDate.amount ?? 0}
+          <StartingBalanceInput
+            compact
+            needsAmount={needsStartingBalance}
             zeroSign={zeroSign}
+            amount={customStartingDate.amount}
             onUpdate={amount =>
               onSetCustomStartingDate(accountId, {
                 ...customStartingDate,
@@ -1689,7 +1702,6 @@ function StartingOptionsFields({
                 precision,
               })
             }
-            style={{ width: '100%' }}
           />
         </Field>
       </>
@@ -1738,9 +1750,11 @@ function StartingOptionsFields({
           >
             <Trans>Balance on that date:</Trans>
           </Text>
-          <AmountInput
-            value={customStartingDate.amount ?? 0}
+          <StartingBalanceInput
+            compact={false}
+            needsAmount={needsStartingBalance}
             zeroSign={zeroSign}
+            amount={customStartingDate.amount}
             onUpdate={amount =>
               onSetCustomStartingDate(accountId, {
                 ...customStartingDate,
@@ -1748,11 +1762,65 @@ function StartingOptionsFields({
                 precision,
               })
             }
-            style={{ width: '100%' }}
           />
         </View>
       </View>
     </View>
+  );
+}
+
+/**
+ * Without a typed amount, the server works out the starting balance from the
+ * bank's current balance and the imported transactions. The field says so
+ * instead of showing 0, and only a typed amount replaces it.
+ */
+function StartingBalanceInput({
+  amount,
+  compact,
+  needsAmount,
+  zeroSign,
+  onUpdate,
+}: {
+  amount: number | undefined;
+  /** The narrow table column gets the short label. */
+  compact: boolean;
+  needsAmount: boolean;
+  zeroSign: '-' | '+';
+  onUpdate: (amount: number) => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [hasTyped, setHasTyped] = useState(false);
+
+  if (amount === undefined && !isEditing && !needsAmount) {
+    return (
+      <Button
+        variant="bare"
+        onPress={() => setIsEditing(true)}
+        style={{
+          width: '100%',
+          justifyContent: 'flex-start',
+          border: '1px solid ' + theme.formInputBorder,
+          color: theme.pageTextSubdued,
+          fontStyle: 'italic',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {compact ? <Trans>From bank</Trans> : <Trans>From bank history</Trans>}
+      </Button>
+    );
+  }
+  return (
+    <AmountInput
+      focused={isEditing}
+      value={amount ?? 0}
+      zeroSign={zeroSign}
+      onChangeValue={() => setHasTyped(true)}
+      onUpdate={value => {
+        setIsEditing(false);
+        if (hasTyped) onUpdate(value);
+      }}
+      style={{ width: '100%' }}
+    />
   );
 }
 
@@ -1956,6 +2024,7 @@ function AccountCard({
             externalBalance={externalAccount.balance}
             customStartingDate={customStartingDate}
             onSetCustomStartingDate={onSetCustomStartingDate}
+            needsStartingBalance={needsStartingBalance}
             layout="stacked"
           />
         </FormatIn>
